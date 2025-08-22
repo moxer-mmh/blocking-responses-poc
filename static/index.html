@@ -410,20 +410,34 @@
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const data = line.slice(6);
+                            
+                            // Handle different SSE data types
                             if (data === '[DONE]') {
-                                output.innerHTML += '\\n\\n[STREAM COMPLETED]';
-                                refreshMetrics(); // Refresh metrics after completion
+                                output.innerHTML += '\\n\\n<span class="safe">[STREAM COMPLETED]</span>';
+                                refreshMetrics();
                                 return;
                             } else if (data === '[BLOCKED]') {
-                                output.innerHTML += '\\n\\n<span class="blocked">[RESPONSE BLOCKED BY SAFETY FILTERS]</span>';
+                                output.innerHTML += '\\n\\n<span class="blocked">[RESPONSE BLOCKED BY COMPLIANCE FILTERS]</span>';
                                 refreshMetrics();
                                 return;
                             } else if (data === '[ERROR]') {
                                 output.innerHTML += '\\n\\n<span class="blocked">[ERROR OCCURRED]</span>';
                                 return;
+                            } else if (data === 'ping') {
+                                // Heartbeat - don't display but keep connection alive
+                                continue;
                             } else {
                                 output.innerHTML += data;
                                 output.scrollTop = output.scrollHeight;
+                            }
+                        } else if (line.startsWith('event: ')) {
+                            const event = line.slice(7);
+                            if (event === 'blocked') {
+                                // Handle blocking event
+                                output.innerHTML += '\\n\\n<span class="blocked">[COMPLIANCE VIOLATION DETECTED]</span>';
+                            } else if (event === 'heartbeat') {
+                                // Just keep the connection alive
+                                continue;
                             }
                         }
                     }

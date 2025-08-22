@@ -10,36 +10,55 @@ This is a complete FastAPI-based system for implementing "blocking responses" - 
 
 ### Core Components
 
-1. **Risk Pattern Engine** (`RiskPatterns`): Configurable regex-based detection for PII, credentials, and harmful content
-2. **LLM Judge** (`LLMJudge`): Secondary AI-based content safety assessment for complex cases
-3. **Streaming Filter** (`guarded_stream()`): Buffer-and-veto mechanism with configurable delays and thresholds
-4. **Metrics System** (`Metrics`): Real-time tracking of blocking rates, performance, and safety statistics
-5. **Configuration Management** (`Settings`): Environment-based configuration with validation
+1. **RegulatedPatternDetector**: Enhanced pattern detection system with regex-based rules for PII, PHI, and PCI compliance
+2. **PresidioDetector**: Microsoft Presidio integration for industrial-grade PII/PHI detection with custom recognizers
+3. **SSE Streaming Pipeline**: Server-Sent Events implementation with token buffering and real-time compliance checking
+4. **Compliance Policy Engine**: Configurable scoring system with regional variations (HIPAA, PCI DSS, GDPR, CCPA)
+5. **Safe Rewrite System**: AI-powered content sanitization with context-aware templates
+6. **Audit Logging**: Comprehensive compliance audit trail with hashed sensitive data
+
+### Key Files
+
+- `app.py`: Main FastAPI application with all endpoints and core logic
+- `test_app.py`: Comprehensive test suite covering all functionality
+- `example_client.py`: Full-featured client demonstrating API usage
+- `requirements.txt`: Python dependencies including Presidio and spaCy
+- `docker-compose.yml`: Multi-service deployment configuration
+- `Makefile`: Comprehensive build and deployment commands
 
 ### API Endpoints
 
-- `POST /chat/stream`: Main streaming endpoint with content filtering
-- `GET /chat/stream`: Legacy endpoint for backwards compatibility
-- `POST /assess-risk`: Risk assessment without streaming
-- `GET /health`: Health check endpoint
-- `GET /metrics`: System performance and safety metrics
-- `GET /config`: Current configuration settings
-- `GET /patterns`: Risk detection patterns and rules
+#### Core Streaming
+- `POST /chat/stream`: Main SSE streaming endpoint with real-time content filtering
+- `GET /chat/stream?q=message`: Legacy GET endpoint for backwards compatibility
 
-### Safety Mechanisms
+#### Risk Assessment
+- `POST /assess-risk?text=content`: Comprehensive compliance assessment without streaming
 
-- **Multi-layer filtering**: Fast regex patterns + optional LLM judge
-- **Configurable thresholds**: Adjustable risk scoring and blocking levels
-- **Safe response templates**: Context-aware replacement messages
-- **Real-time metrics**: Monitor blocking effectiveness and false positive rates
-- **Fail-safe design**: Defaults to blocking on errors or uncertainty
+#### Compliance Management
+- `GET /compliance/patterns`: Available compliance patterns by category
+- `GET /compliance/config`: Current compliance configuration
+- `POST /compliance/safe-rewrite`: AI-powered content sanitization
+
+#### System Health
+- `GET /health`: Enhanced health check with dependency status
+- `GET /metrics`: Real-time performance and compliance metrics
+
+### Safety Architecture
+
+- **Buffer-and-Veto**: Token-based streaming with configurable look-ahead window
+- **Multi-layer Detection**: Fast regex patterns + Presidio ML models
+- **Regional Compliance**: HIPAA, PCI DSS, GDPR, and CCPA support
+- **Fail-safe Design**: Defaults to blocking on errors or uncertainty
+- **Audit Trail**: Complete compliance logging with data hashing
 
 ## Development Commands
 
 ### Environment Setup
 ```bash
-# Install dependencies
+# Install dependencies (includes Presidio and spaCy models)
 pip install -r requirements.txt
+python -m spacy download en_core_web_lg
 
 # Copy and configure environment
 cp .env.example .env
@@ -61,8 +80,9 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 pytest test_app.py -v
 
 # Run specific test categories
-pytest test_app.py::TestRiskPatterns -v
-pytest test_app.py::TestChatStreaming -v
+pytest test_app.py::TestComplianceDetection -v
+pytest test_app.py::TestSSEStreaming -v
+pytest test_app.py::TestAuditLogging -v
 
 # Run with coverage
 pytest test_app.py --cov=app --cov-report=html
@@ -73,8 +93,19 @@ pytest test_app.py --cov=app --cov-report=html
 # Build and run with Docker Compose
 docker-compose up --build
 
-# Access API at http://localhost:8000
-# Access web interface at http://localhost:80
+# Start basic services (API + Web)
+make start
+
+# Start with monitoring stack
+make monitoring
+
+# Run in development mode with logs
+make dev
+
+# Access services:
+# Web Interface: http://localhost
+# API: http://localhost:8000
+# API Documentation: http://localhost:8000/docs
 ```
 
 ### Example Client
@@ -92,127 +123,235 @@ python example_client.py interactive
 - `OPENAI_API_KEY`: Required for LLM functionality
 - `DEFAULT_MODEL`: Primary LLM model (default: gpt-4o-mini)
 - `JUDGE_MODEL`: Secondary safety judge model (default: gpt-4o-mini)
-- `DELAY_TOKENS`: Buffer size in tokens (default: 20)
+- `DELAY_TOKENS`: Buffer size in tokens (default: 24)
 - `DELAY_MS`: Maximum flush delay in milliseconds (default: 250)
 - `RISK_THRESHOLD`: Blocking threshold (default: 1.0)
-- `JUDGE_THRESHOLD`: LLM judge activation threshold (default: 0.8)
-- `ENABLE_JUDGE`: Enable/disable LLM judge (default: true)
+- `PRESIDIO_CONFIDENCE_THRESHOLD`: Presidio detection threshold (default: 0.6)
+- `ENABLE_SAFE_REWRITE`: Enable AI-powered safe responses (default: true)
+- `ENABLE_AUDIT_LOGGING`: Enable compliance audit logging (default: true)
+- `HASH_SENSITIVE_DATA`: Hash sensitive data in logs (default: true)
 - `LOG_LEVEL`: Logging verbosity (default: INFO)
 - `CORS_ORIGINS`: Allowed CORS origins (default: *)
 
-### Risk Patterns and Scoring
-- **Email addresses**: 0.5 points
-- **Phone numbers**: 0.3 points  
-- **SSN patterns**: 1.0 points (blocks by default)
-- **Credit card patterns**: 1.0 points (blocks by default)
-- **Secrets/credentials**: 0.8 points
-- **Harmful content**: 1.5 points (blocks by default)
+### Compliance Scoring System
 
-Scores are cumulative - multiple patterns in a response add up.
+The system uses a weighted scoring approach where patterns accumulate scores:
+
+#### PII (Personally Identifiable Information)
+- Email addresses: 0.4 points
+- Phone numbers: 0.5 points
+- SSN patterns: 1.2 points (blocks by default)
+- Names: 0.3 points
+- Addresses: 0.5 points
+
+#### PHI (Protected Health Information - HIPAA)
+- Medical record numbers: 1.0 points (blocks by default)
+- Diagnosis information: 0.8 points
+- Medication references: 0.7 points
+- PHI contextual terms: 0.6 points
+
+#### PCI (Payment Card Industry)
+- Credit card numbers: 1.5 points (blocks by default)
+- IBAN codes: 0.9 points
+- Bank account numbers: 0.7 points
+- Routing numbers: 0.8 points
+
+#### Security Credentials
+- Passwords: 0.5 points
+- API keys: 0.8 points
+- Secrets/tokens: 0.7 points
+
+#### Presidio Integration
+- Base Presidio detections: 0.9 points (weighted by confidence)
+
+### Regional Compliance Variations
+
+Different compliance frameworks have adjusted thresholds and weights:
+
+- **HIPAA**: Stricter PHI detection, medical record weight increased to 1.5
+- **PCI DSS**: Enhanced financial data detection, credit card weight increased to 2.0
+- **GDPR**: Balanced PII detection with email weight at 0.6
+- **CCPA**: Similar to GDPR with phone number weight at 0.6
 
 ## Testing Strategy
 
 ### Test Categories
-1. **Risk Pattern Tests**: Verify detection accuracy for each pattern type
-2. **LLM Judge Tests**: Mock-based testing of secondary safety assessment
-3. **API Endpoint Tests**: Comprehensive coverage of all endpoints
-4. **Streaming Tests**: End-to-end streaming with blocking scenarios
-5. **Configuration Tests**: Parameter validation and customization
-6. **Error Handling Tests**: Graceful handling of failures and edge cases
-7. **Metrics Tests**: Tracking accuracy and performance monitoring
+1. **ComplianceDetection**: Pattern and Presidio detection accuracy
+2. **SSEStreaming**: Server-Sent Events functionality and heartbeat
+3. **AuditLogging**: Compliance audit trail validation
+4. **ComplianceEndpoints**: Specialized compliance API endpoints
+5. **LLMJudge**: Secondary AI safety assessment (mocked)
+6. **API**: Core endpoint functionality
+7. **StreamBlocking**: End-to-end blocking scenarios
+8. **Configuration**: Parameter validation and customization
+9. **ErrorHandling**: Graceful failure modes
+10. **SafeTemplates**: Context-aware response templates
+11. **Metrics**: Performance tracking accuracy
 
-### Test Data Patterns
-- Safe content examples
-- Individual risk pattern triggers
-- Multi-pattern combinations
-- Edge cases and boundary conditions
-- Error scenarios and malformed input
+### Running Specific Tests
+```bash
+# Test compliance detection only
+pytest test_app.py::TestComplianceDetection -v
+
+# Test SSE streaming
+pytest test_app.py::TestSSEStreaming -v
+
+# Test audit logging
+pytest test_app.py::TestAuditLogging -v
+
+# Test with specific pattern
+pytest test_app.py -k "test_ssn_detection" -v
+```
+
+## Docker Architecture
+
+### Service Components
+
+1. **API Container**: FastAPI app with Presidio and compliance logic
+2. **Web Container**: Nginx serving static interface + reverse proxy
+3. **Redis Container**: Optional shared metrics storage (profile: redis)
+4. **Prometheus Container**: Optional monitoring (profile: monitoring)
+5. **Grafana Container**: Optional dashboards (profile: monitoring)
+
+### Common Docker Commands
+```bash
+# Start basic services
+make start
+
+# Development with logs
+make dev
+
+# With monitoring stack
+make monitoring
+
+# Run tests in container
+make test
+
+# Open shell in API container
+make shell
+
+# Check service health
+make health
+
+# View logs
+make logs
+
+# Stop all services
+make stop
+
+# Clean up everything
+make clean
+```
 
 ## Performance Considerations
 
 ### Latency Optimization
-- Fast regex patterns execute in microseconds
-- LLM judge only called for borderline cases (> judge_threshold)
-- Configurable buffer sizes balance safety vs. responsiveness
-- Time-based flushing prevents indefinite delays
+- Presidio analysis runs in parallel with regex patterns
+- Token-based buffering balances safety vs. responsiveness
+- Configurable flush delays prevent indefinite blocking
+- Fast pattern matching executes in microseconds
 
 ### Scaling Considerations
 - Stateless design supports horizontal scaling
-- Metrics stored in memory (consider Redis for multi-instance)
-- LLM judge calls are the primary bottleneck
-- Monitor block rates to tune thresholds
+- Nginx automatically load balances multiple API containers
+- Redis available for shared metrics across instances
+- Presidio models are memory-intensive (4GB+ recommended)
 
 ## Security Implementation
 
 ### Defense in Depth
-1. **Fast filters**: Catch obvious patterns immediately
-2. **LLM judge**: Handle nuanced cases and reduce false positives
-3. **Configurable thresholds**: Tune sensitivity vs. usability
-4. **Safe templates**: Provide helpful responses instead of errors
-5. **Audit logging**: Track what's blocked and why
+1. **Fast Filters**: Immediate detection of obvious patterns
+2. **Presidio ML**: Advanced entity recognition for complex cases  
+3. **Configurable Thresholds**: Tune sensitivity vs. usability
+4. **Safe Rewrite**: AI-powered content sanitization
+5. **Audit Logging**: Comprehensive compliance trail
 
 ### Privacy Protection
-- Text snippets in logs are truncated to 100 characters
-- Risk assessments don't store full content
+- Sensitive data hashed in audit logs using SHA-256 (truncated to 16 chars)
+- Risk assessments don't store full content beyond snippets
 - Metrics are aggregated without sensitive details
-- Client disconnection handled to prevent data leaks
+- Session tracking for audit requirements
 
 ## Deployment Options
 
 ### Local Development
-- Direct Python execution with uvicorn
-- Automatic reloading for development
-- Environment-based configuration
+```bash
+# Direct Python execution
+uvicorn app:app --reload
+
+# Docker development mode
+make dev
+```
 
 ### Docker Container
-- Multi-stage build for optimization
-- Non-root user for security
-- Health checks and restart policies
-- Volume mounts for configuration
+```bash
+# Basic deployment
+docker-compose up -d
+
+# With monitoring
+make monitoring
+
+# Production mode
+make prod
+```
 
 ### Production Deployment
-- NGINX reverse proxy for load balancing
-- Environment variable configuration
-- Centralized logging and monitoring
-- SSL termination and security headers
+- Multi-service architecture with health checks
+- Nginx reverse proxy with load balancing
+- Environment-based configuration
+- Volume persistence for metrics and logs
+- Optional SSL termination ready
 
 ## Monitoring and Observability
 
-### Key Metrics
-- **Total requests**: Volume tracking
-- **Block rate**: Safety effectiveness
-- **Judge calls**: Secondary assessment usage
-- **Average delay**: Performance impact
-- **Risk score distribution**: Pattern detection frequency
+### Built-in Metrics
+Available at `/metrics` endpoint:
+- Total requests and block rates
+- Risk score distributions  
+- Presidio detection frequency
+- Performance timings
+- Audit event summaries
 
 ### Health Monitoring
-- `/health` endpoint for load balancer checks
-- Application startup validation
-- Dependency health (OpenAI API connectivity)
-- Resource usage tracking
+- `/health` endpoint with dependency checks
+- Docker health checks for all services
+- Prometheus integration available
+- Grafana dashboards ready
+
+### Audit Features
+- Complete compliance event logging
+- Session tracking with hashed identifiers
+- Risk assessment history
+- Blocking rationale tracking
 
 ## Common Development Tasks
 
 ### Adding New Risk Patterns
-1. Add pattern to `RiskPatterns.patterns` dictionary
-2. Include regex, score, and description
-3. Add test cases in `TestRiskPatterns`
-4. Update documentation
+1. Add pattern to `RegulatedPatternDetector.patterns` dictionary
+2. Include regex, score assignment in `COMPLIANCE_POLICY["weights"]`
+3. Add comprehensive test cases in `TestComplianceDetection`
+4. Update regional variations if needed
 
-### Modifying Safety Thresholds
-1. Update default values in `Settings` class
-2. Test with various content types
-3. Monitor metrics for effectiveness
-4. Document threshold rationale
+### Modifying Compliance Thresholds
+1. Update `COMPLIANCE_POLICY["threshold"]` or environment variable
+2. Adjust regional weights in `COMPLIANCE_POLICY["regional_weights"]`
+3. Test with various content types in test suite
+4. Monitor metrics for effectiveness
 
-### Extending LLM Judge
-1. Modify system prompt in `LLMJudge.__init__`
-2. Adjust response parsing logic
-3. Add comprehensive test coverage
+### Extending Presidio Integration
+1. Add custom recognizers in `PresidioDetector._add_custom_recognizers()`
+2. Update entity scoring in `analyze_text()` method
+3. Add corresponding test cases with mocked Presidio responses
 4. Monitor performance impact
 
-### Custom Response Templates
+### Custom Safe Response Templates
 1. Add templates to `SAFE_TEMPLATES` dictionary
-2. Update `get_safe_template()` logic
+2. Update template selection logic in `safe_rewrite_stream()`
 3. Test with various blocking scenarios
-4. Ensure user-friendly messaging
+4. Ensure context-appropriate messaging
+
+### Regional Compliance Customization
+1. Add new compliance type to `COMPLIANCE_POLICY["regional_weights"]`
+2. Update scoring logic in `assess_compliance_risk()`
+3. Add endpoint support in compliance routes
+4. Create test coverage for new compliance type

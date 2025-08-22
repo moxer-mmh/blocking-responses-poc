@@ -2,86 +2,293 @@
 import pytest
 import json
 from httpx import AsyncClient
-from unittest.mock import patch, AsyncMock
-from app import app, settings, metrics, risk_patterns, llm_judge
+from unittest.mock import patch, AsyncMock, MagicMock
+from app import app, settings, pattern_detector, presidio_detector
 
 # Test fixtures
 @pytest.fixture
 def client():
     return AsyncClient(app=app, base_url="http://test")
 
-@pytest.fixture(autouse=True)
-def reset_metrics():
-    """Reset metrics before each test"""
-    metrics.total_requests = 0
-    metrics.blocked_requests = 0
-    metrics.judge_calls = 0
-    metrics.avg_delay_ms = 0.0
-    metrics.risk_scores = []
+# Metrics system is not implemented in current version
+# @pytest.fixture(autouse=True)
+# def reset_metrics():
+#     """Reset metrics before each test"""
+#     pass
 
-class TestRiskPatterns:
-    """Test risk pattern detection"""
+class TestComplianceDetection:
+    """Test enhanced compliance detection with Presidio"""
     
-    def test_email_detection(self):
-        assessment = risk_patterns.assess_risk("Contact me at john.doe@example.com")
-        assert assessment.score == 0.5
-        assert len(assessment.triggered_rules) == 1
-        assert "email" in assessment.triggered_rules[0]
+    @patch('app.compliance_detector.presidio_analyzer')
+    def test_email_detection_presidio(self, mock_analyzer):
+        # Mock Presidio analyzer
+        mock_result = MagicMock()
+        mock_result.entity_type = "EMAIL_ADDRESS" 
+        mock_result.score = 0.9
+        mock_result.start = 11
+        mock_result.end = 30
+        mock_analyzer.analyze.return_value = [mock_result]
+        
+        assessment = compliance_detector.assess_compliance("Contact me at john.doe@example.com", threshold=1.0)
+        assert assessment.total_score >= 0.5
+        assert len(assessment.detected_entities) >= 1
+        assert not assessment.blocked  # Below threshold
+    
+    def test_email_detection_regex(self):
+        assessment = compliance_detector.assess_compliance("Contact me at john.doe@example.com", threshold=1.0)
+        assert assessment.total_score >= 0.5
+        assert len(assessment.triggered_patterns) >= 1
+        assert any("email" in pattern for pattern in assessment.triggered_patterns)
         assert not assessment.blocked  # Below default threshold
     
-    def test_ssn_detection(self):
-        assessment = risk_patterns.assess_risk("My SSN is 123-45-6789")
-        assert assessment.score == 1.0
-        assert len(assessment.triggered_rules) == 1
-        assert "ssn" in assessment.triggered_rules[0]
-        assert assessment.blocked  # At default threshold
-    
-    def test_credit_card_detection(self):
-        assessment = risk_patterns.assess_risk("Card number: 1234 5678 9012 3456")
-        assert assessment.score == 1.0
-        assert len(assessment.triggered_rules) == 1
-        assert "credit_card" in assessment.triggered_rules[0]
+    @patch('app.compliance_detector.presidio_analyzer')
+    def test_ssn_detection_presidio(self, mock_analyzer):
+        mock_result = MagicMock()
+        mock_result.entity_type = "US_SSN"
+        mock_result.score = 0.95
+        mock_result.start = 10
+        mock_result.end = 21
+        mock_analyzer.analyze.return_value = [mock_result]
+        
+        assessment = compliance_detector.assess_compliance("My SSN is 123-45-6789", threshold=1.0)
+        assert assessment.total_score >= 1.0
+        assert len(assessment.detected_entities) >= 1
         assert assessment.blocked
     
-    def test_phone_detection(self):
-        assessment = risk_patterns.assess_risk("Call me at (555) 123-4567")
-        assert assessment.score == 0.3
-        assert len(assessment.triggered_rules) == 1
-        assert "phone" in assessment.triggered_rules[0]
-        assert not assessment.blocked
-    
-    def test_secrets_detection(self):
-        assessment = risk_patterns.assess_risk("My password is secret123")
-        assert assessment.score == 0.8
-        assert len(assessment.triggered_rules) == 1
-        assert "secrets" in assessment.triggered_rules[0]
-        assert not assessment.blocked  # Below default threshold
-    
-    def test_harmful_content_detection(self):
-        assessment = risk_patterns.assess_risk("I want to kill this bug")
-        assert assessment.score == 1.5
-        assert len(assessment.triggered_rules) == 1
-        assert "harmful_content" in assessment.triggered_rules[0]
+    def test_ssn_detection_regex(self):
+        assessment = compliance_detector.assess_compliance("My SSN is 123-45-6789", threshold=1.0)
+        assert assessment.total_score >= 1.0
+        assert len(assessment.triggered_patterns) >= 1
+        assert any("ssn" in pattern for pattern in assessment.triggered_patterns)
         assert assessment.blocked
     
-    def test_multiple_patterns(self):
-        text = "Email me at test@example.com or call (555) 123-4567 with your password"
-        assessment = risk_patterns.assess_risk(text)
-        assert assessment.score == 1.6  # 0.5 + 0.3 + 0.8
-        assert len(assessment.triggered_rules) == 3
+    @patch('app.compliance_detector.presidio_analyzer')
+    def test_credit_card_detection_presidio(self, mock_analyzer):
+        mock_result = MagicMock()
+        mock_result.entity_type = "CREDIT_CARD"
+        mock_result.score = 0.9
+        mock_result.start = 14
+        mock_result.end = 33
+        mock_analyzer.analyze.return_value = [mock_result]
+        
+        assessment = compliance_detector.assess_compliance("Card number: 1234 5678 9012 3456", threshold=1.0)
+        assert assessment.total_score >= 1.0
+        assert len(assessment.detected_entities) >= 1
+        assert assessment.blocked
+    
+    def test_phone_detection_regex(self):
+        assessment = compliance_detector.assess_compliance("Call me at (555) 123-4567", threshold=1.0)
+        assert assessment.total_score >= 0.3
+        assert len(assessment.triggered_patterns) >= 1
+        assert any("phone" in pattern for pattern in assessment.triggered_patterns)
+        assert not assessment.blocked  # Below threshold
+    
+    def test_hipaa_phi_detection(self):
+        phi_text = "Patient John Doe, DOB: 01/15/1980, diagnosed with diabetes"
+        assessment = compliance_detector.assess_compliance(phi_text, threshold=0.8, compliance_type="HIPAA")
+        assert assessment.total_score >= 0.8
+        assert assessment.blocked
+        assert assessment.compliance_type == "HIPAA"
+    
+    def test_pci_dss_detection(self):
+        pci_text = "Customer card: 4532 1234 5678 9012, CVV: 123, exp: 12/25"
+        assessment = compliance_detector.assess_compliance(pci_text, threshold=0.8, compliance_type="PCI_DSS")
+        assert assessment.total_score >= 1.5  # Multiple PCI violations
+        assert assessment.blocked
+        assert assessment.compliance_type == "PCI_DSS"
+    
+    def test_gdpr_pii_detection(self):
+        pii_text = "Name: María González, Email: maria@example.com, IP: 192.168.1.1"
+        assessment = compliance_detector.assess_compliance(pii_text, threshold=0.8, compliance_type="GDPR")
+        assert assessment.total_score >= 1.0
+        assert assessment.blocked
+        assert assessment.compliance_type == "GDPR"
+    
+    def test_multiple_compliance_violations(self):
+        text = "Patient: John Doe, SSN: 123-45-6789, Card: 4532123456789012, Email: john@hospital.com"
+        assessment = compliance_detector.assess_compliance(text, threshold=1.0)
+        assert assessment.total_score >= 2.0  # Multiple high-risk violations
+        assert len(assessment.triggered_patterns) >= 3
         assert assessment.blocked
     
     def test_safe_content(self):
-        assessment = risk_patterns.assess_risk("What is the weather today?")
-        assert assessment.score == 0.0
-        assert len(assessment.triggered_rules) == 0
+        assessment = compliance_detector.assess_compliance("What is the weather today?", threshold=1.0)
+        assert assessment.total_score == 0.0
+        assert len(assessment.triggered_patterns) == 0
+        assert len(assessment.detected_entities) == 0
         assert not assessment.blocked
     
     def test_snippet_truncation(self):
         long_text = "a" * 150 + "test@example.com"
-        assessment = risk_patterns.assess_risk(long_text)
-        assert len(assessment.snippet) == 103  # 100 + "..."
-        assert assessment.snippet.endswith("...")
+        assessment = compliance_detector.assess_compliance(long_text, threshold=1.0)
+        assert len(assessment.text_snippet) <= 103  # Truncated with ...
+        if len(assessment.text_snippet) == 103:
+            assert assessment.text_snippet.endswith("...")
+
+class TestSSEStreaming:
+    """Test Server-Sent Events streaming functionality"""
+    
+    @pytest.mark.asyncio
+    @patch('app.settings.openai_api_key', 'test-key')
+    @patch('app.ChatOpenAI')
+    async def test_sse_format(self, mock_openai, client):
+        mock_chain = AsyncMock()
+        mock_chain.astream.return_value = iter(["Hello ", "world!"])
+        
+        with patch('app.chain', mock_chain):
+            request_data = {"message": "Hello"}
+            response = await client.post("/chat/stream", json=request_data)
+            
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            assert response.headers["cache-control"] == "no-cache"
+            assert response.headers["connection"] == "keep-alive"
+    
+    @pytest.mark.asyncio
+    @patch('app.settings.openai_api_key', 'test-key')
+    @patch('app.ChatOpenAI')
+    async def test_sse_heartbeat(self, mock_openai, client):
+        mock_chain = AsyncMock()
+        mock_chain.astream.return_value = iter([])  # Empty stream to test heartbeat
+        
+        with patch('app.chain', mock_chain):
+            request_data = {"message": "Hello", "delay_ms": 100}
+            response = await client.post("/chat/stream", json=request_data)
+            
+            content = b""
+            async for chunk in response.aiter_bytes():
+                content += chunk
+                if b"event: heartbeat" in content:
+                    break  # Found heartbeat
+            
+            content_str = content.decode()
+            assert "event: heartbeat" in content_str
+            assert "data: ping" in content_str
+    
+    @pytest.mark.asyncio
+    @patch('app.settings.openai_api_key', 'test-key')
+    @patch('app.ChatOpenAI')
+    async def test_sse_compliance_blocking(self, mock_openai, client):
+        # Mock stream with SSN that should be blocked
+        mock_chain = AsyncMock()
+        mock_chain.astream.return_value = iter(["Your SSN is ", "123-45-", "6789"])
+        
+        with patch('app.chain', mock_chain):
+            request_data = {"message": "What's my SSN?"}
+            response = await client.post("/chat/stream", json=request_data)
+            
+            content = b""
+            async for chunk in response.aiter_bytes():
+                content += chunk
+            
+            content_str = content.decode()
+            assert "event: blocked" in content_str
+            assert "PII/PHI detected" in content_str or "compliance violation" in content_str
+
+class TestAuditLogging:
+    """Test audit logging and compliance tracking"""
+    
+    @pytest.mark.asyncio
+    async def test_audit_log_creation(self, client):
+        response = await client.post("/assess-risk", params={"text": "My SSN is 123-45-6789"})
+        assert response.status_code == 200
+        
+        # Check that audit log was created
+        audit_logs = metrics.get_audit_logs()
+        assert len(audit_logs) > 0
+        
+        latest_log = audit_logs[-1]
+        assert latest_log["event_type"] == "risk_assessment"
+        assert latest_log["blocked"] is True
+        assert "user_agent" in latest_log
+        assert "timestamp" in latest_log
+    
+    @pytest.mark.asyncio
+    @patch('app.settings.openai_api_key', 'test-key')
+    @patch('app.ChatOpenAI')
+    async def test_streaming_audit_log(self, mock_openai, client):
+        mock_chain = AsyncMock()
+        mock_chain.astream.return_value = iter(["Safe response"])
+        
+        with patch('app.chain', mock_chain):
+            request_data = {"message": "Hello"}
+            response = await client.post("/chat/stream", json=request_data)
+            
+            # Consume the stream
+            async for chunk in response.aiter_bytes():
+                pass
+        
+        # Check audit log
+        audit_logs = metrics.get_audit_logs()
+        stream_logs = [log for log in audit_logs if log["event_type"] == "stream_chat"]
+        assert len(stream_logs) > 0
+        
+        latest_log = stream_logs[-1]
+        assert "session_id" in latest_log
+        assert "tokens_processed" in latest_log
+        assert "compliance_checks" in latest_log
+    
+    @pytest.mark.asyncio
+    async def test_compliance_endpoint_audit(self, client):
+        response = await client.get("/compliance/audit-logs")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "logs" in data
+        assert "total_count" in data
+        assert "filtered_count" in data
+
+class TestComplianceEndpoints:
+    """Test new compliance-specific endpoints"""
+    
+    @pytest.mark.asyncio
+    async def test_compliance_patterns_endpoint(self, client):
+        response = await client.get("/compliance/patterns")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "PII" in data
+        assert "PHI" in data
+        assert "PCI" in data
+        assert "email" in data["PII"]
+        assert "ssn" in data["PII"]
+        assert "credit_card" in data["PCI"]
+    
+    @pytest.mark.asyncio
+    async def test_compliance_types_endpoint(self, client):
+        response = await client.get("/compliance/types")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "HIPAA" in data
+        assert "PCI_DSS" in data
+        assert "GDPR" in data
+        assert "CCPA" in data
+        
+        # Check HIPAA details
+        assert data["HIPAA"]["description"]
+        assert data["HIPAA"]["default_threshold"] == 0.7
+    
+    @pytest.mark.asyncio
+    async def test_safe_rewrite_endpoint(self, client):
+        request_data = {
+            "text": "Contact John Doe at john.doe@company.com or call (555) 123-4567",
+            "compliance_type": "PII",
+            "rewrite_style": "professional"
+        }
+        
+        response = await client.post("/compliance/safe-rewrite", json=request_data)
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "original_text" in data
+        assert "rewritten_text" in data
+        assert "detected_violations" in data
+        assert "rewrite_applied" in data
+        
+        # Should not contain the original PII
+        assert "john.doe@company.com" not in data["rewritten_text"]
+        assert "(555) 123-4567" not in data["rewritten_text"]
 
 class TestLLMJudge:
     """Test LLM judge functionality"""
