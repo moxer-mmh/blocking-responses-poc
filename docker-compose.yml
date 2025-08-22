@@ -30,18 +30,13 @@ services:
       retries: 3
       start_period: 40s
 
-  # Web interface (nginx serving static files + reverse proxy)
-  web:
-    image: nginx:alpine
-    container_name: blocking-responses-web
+  # Modern React frontend
+  frontend:
+    build: ./frontend
+    container_name: compliance-dashboard-frontend
     ports:
       - "80:80"
       - "443:443"  # For future SSL setup
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./static:/usr/share/nginx/html:ro
-      # Uncomment for SSL certificates
-      # - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       api:
         condition: service_healthy
@@ -51,6 +46,22 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Legacy web interface (static files)
+  web:
+    image: nginx:alpine
+    container_name: blocking-responses-web-legacy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/usr/share/nginx/html:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - legacy  # Only start with --profile legacy
 
   # Optional: Redis for shared metrics (multi-instance deployments)
   redis:
