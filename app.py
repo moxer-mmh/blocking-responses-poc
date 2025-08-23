@@ -12,6 +12,13 @@ import asyncio, re, json, hashlib, logging
 from datetime import datetime
 import os
 
+# Database imports
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+import aiosqlite
+
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -77,6 +84,48 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_origins.split(",")]
 
 settings = Settings()
+
+# -------------------- Database Setup --------------------
+Base = declarative_base()
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    event_type = Column(String(50), nullable=False)
+    user_input_hash = Column(String(32), nullable=False)
+    blocked_content_hash = Column(String(32), nullable=True)
+    risk_score = Column(Float, nullable=False)
+    triggered_rules = Column(Text, nullable=False)  # JSON string
+    session_id = Column(String(32), nullable=True)
+    compliance_region = Column(String(20), nullable=True)
+    presidio_entities = Column(Text, nullable=True)  # JSON string
+    processing_time_ms = Column(Float, nullable=True)
+
+class MetricsSnapshot(Base):
+    __tablename__ = "metrics_snapshots"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    total_requests = Column(Integer, nullable=False)
+    blocked_requests = Column(Integer, nullable=False)
+    block_rate = Column(Float, nullable=False)
+    avg_risk_score = Column(Float, nullable=False)
+    avg_processing_time = Column(Float, nullable=False)
+    pattern_detections = Column(Text, nullable=False)  # JSON string
+    presidio_detections = Column(Text, nullable=False)  # JSON string
+
+# Database configuration
+DATABASE_URL = "sqlite+aiosqlite:///./compliance_audit.db"
+engine = create_async_engine(DATABASE_URL, echo=False)
+async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+# Initialize database
+async def init_database():
+    """Initialize database tables"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 # Logging setup
 logging.basicConfig(
@@ -367,7 +416,7 @@ class MetricsTracker:
         return 0.0
     
     def get_audit_logs(self):
-        """Get audit logs (placeholder for now)"""
+        """Get audit logs (now returns a placeholder - use get_audit_logs() function for real data)"""
         return []
 
 metrics = MetricsTracker()
@@ -585,13 +634,13 @@ async def safe_rewrite_stream(user_input: str, detected_types: List[str]) -> Asy
         yield "I apologize, but I cannot provide a response due to compliance requirements."
 
 # -------------------- Audit Logging --------------------
-async def log_audit_event(event: AuditEvent):
-    """Log compliance audit events"""
+async def log_audit_event(event: AuditEvent, processing_time_ms: Optional[float] = None, presidio_entities: Optional[List[Dict]] = None):
+    """Log compliance audit events to database and logs"""
     if not settings.enable_audit_logging:
         return
     
     try:
-        # In production, this would go to a secure audit log system
+        # Log to console/file (existing functionality)
         audit_data = {
             "timestamp": event.timestamp.isoformat(),
             "event_type": event.event_type,
@@ -604,11 +653,78 @@ async def log_audit_event(event: AuditEvent):
         
         logger.info(f"AUDIT_EVENT: {json.dumps(audit_data)}")
         
+        # Save to database
+        async with async_session() as session:
+            db_audit = AuditLog(
+                timestamp=event.timestamp,
+                event_type=event.event_type,
+                user_input_hash=event.user_input_hash,
+                blocked_content_hash=event.blocked_content_hash,
+                risk_score=event.risk_score,
+                triggered_rules=json.dumps(event.triggered_rules),
+                session_id=event.session_id,
+                presidio_entities=json.dumps(presidio_entities) if presidio_entities else None,
+                processing_time_ms=processing_time_ms
+            )
+            session.add(db_audit)
+            await session.commit()
+        
         # TODO: Send to secure audit storage system
         # await audit_storage.store_event(audit_data)
         
     except Exception as e:
         logger.error(f"Audit logging failed: {e}")
+
+async def save_metrics_snapshot():
+    """Save current metrics to database"""
+    try:
+        async with async_session() as session:
+            snapshot = MetricsSnapshot(
+                total_requests=metrics.total_requests,
+                blocked_requests=metrics.blocked_requests,
+                block_rate=metrics.block_rate,
+                avg_risk_score=metrics.avg_risk_score,
+                avg_processing_time=metrics.avg_processing_time,
+                pattern_detections=json.dumps(dict(metrics.pattern_detections)),
+                presidio_detections=json.dumps(dict(metrics.presidio_detections))
+            )
+            session.add(snapshot)
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to save metrics snapshot: {e}")
+
+async def get_audit_logs(limit: int = 100, event_type: Optional[str] = None) -> List[Dict]:
+    """Retrieve audit logs from database"""
+    try:
+        async with async_session() as session:
+            from sqlalchemy import select, desc
+            
+            query = select(AuditLog).order_by(desc(AuditLog.timestamp)).limit(limit)
+            if event_type:
+                query = query.where(AuditLog.event_type == event_type)
+            
+            result = await session.execute(query)
+            logs = result.scalars().all()
+            
+            return [
+                {
+                    "id": log.id,
+                    "timestamp": log.timestamp.isoformat(),
+                    "event_type": log.event_type,
+                    "user_input_hash": log.user_input_hash,
+                    "blocked_content_hash": log.blocked_content_hash,
+                    "risk_score": log.risk_score,
+                    "triggered_rules": json.loads(log.triggered_rules),
+                    "session_id": log.session_id,
+                    "compliance_region": log.compliance_region,
+                    "presidio_entities": json.loads(log.presidio_entities) if log.presidio_entities else [],
+                    "processing_time_ms": log.processing_time_ms
+                }
+                for log in logs
+            ]
+    except Exception as e:
+        logger.error(f"Failed to retrieve audit logs: {e}")
+        return []
 
 # -------------------- Main SSE Endpoint --------------------
 @app.post("/chat/stream")
@@ -728,7 +844,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                             timestamp=datetime.utcnow(),
                             session_id=session_id
                         )
-                        await log_audit_event(audit_event)
+                        await log_audit_event(audit_event, processing_time_ms=elapsed_ms, presidio_entities=presidio_entities)
                         
                         logger.warning(f"Content blocked - Score: {total_score:.2f}, Rules: {all_triggered_rules}")
                         
@@ -769,7 +885,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                         timestamp=datetime.utcnow(),
                         session_id=session_id
                     )
-                    await log_audit_event(audit_event)
+                    await log_audit_event(audit_event, processing_time_ms=elapsed_ms, presidio_entities=[])
                     
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
@@ -963,6 +1079,46 @@ async def get_config():
         "hash_sensitive_data": settings.hash_sensitive_data,
         "cors_origins": settings.get_cors_origins()
     }
+
+@app.get("/audit-logs")
+async def get_audit_logs_endpoint(limit: int = 100, event_type: Optional[str] = None):
+    """Get audit logs from database"""
+    logs = await get_audit_logs(limit=limit, event_type=event_type)
+    return {
+        "logs": logs,
+        "count": len(logs),
+        "total_available": len(logs) # In a real system, this would be a separate count query
+    }
+
+@app.post("/metrics/snapshot")
+async def create_metrics_snapshot():
+    """Save current metrics to database"""
+    await save_metrics_snapshot()
+    return {"status": "snapshot_saved", "timestamp": datetime.utcnow().isoformat()}
+
+# Database initialization
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup"""
+    try:
+        await init_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+
+# Alternative startup for newer FastAPI versions
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        await init_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+    
+    yield
+    
+    # Shutdown (if needed)
+    pass
 
 if __name__ == "__main__":
     import uvicorn
