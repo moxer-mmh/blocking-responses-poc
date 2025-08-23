@@ -287,6 +287,90 @@ class RegulatedPatternDetector:
             timestamp=datetime.utcnow()
         )
 
+# -------------------- Metrics Tracking --------------------
+class MetricsTracker:
+    def __init__(self):
+        self.total_requests = 0
+        self.blocked_requests = 0
+        self.judge_calls = 0
+        self.risk_scores = []
+        self.delay_times = []
+        self.pattern_detections = {}
+        self.presidio_detections = {}
+        self.start_time = monotonic()
+        
+    def record_request(self, blocked=False, delay_ms=0, risk_score=0.0):
+        """Record a request with its metrics"""
+        self.total_requests += 1
+        if blocked:
+            self.blocked_requests += 1
+        
+        # Keep last 1000 risk scores for averaging
+        self.risk_scores.append(risk_score)
+        if len(self.risk_scores) > 1000:
+            self.risk_scores.pop(0)
+        
+        # Keep last 1000 delay times for averaging
+        self.delay_times.append(delay_ms)
+        if len(self.delay_times) > 1000:
+            self.delay_times.pop(0)
+    
+    def record_pattern_detection(self, pattern_name):
+        """Record a pattern detection"""
+        self.pattern_detections[pattern_name] = self.pattern_detections.get(pattern_name, 0) + 1
+    
+    def record_presidio_detection(self, entity_type):
+        """Record a Presidio entity detection"""
+        self.presidio_detections[entity_type] = self.presidio_detections.get(entity_type, 0) + 1
+    
+    def record_judge_call(self):
+        """Record an LLM judge call"""
+        self.judge_calls += 1
+    
+    @property
+    def block_rate(self):
+        """Calculate block rate as percentage"""
+        if self.total_requests == 0:
+            return 0.0
+        return (self.blocked_requests / self.total_requests) * 100
+    
+    @property
+    def avg_risk_score(self):
+        """Calculate average risk score"""
+        if not self.risk_scores:
+            return 0.0
+        return sum(self.risk_scores) / len(self.risk_scores)
+    
+    @property
+    def avg_processing_time(self):
+        """Calculate average processing time in ms"""
+        if not self.delay_times:
+            return 0.0
+        return sum(self.delay_times) / len(self.delay_times)
+    
+    @property
+    def avg_response_time(self):
+        """Calculate average response time (same as processing time for now)"""
+        return self.avg_processing_time
+    
+    @property
+    def requests_per_second(self):
+        """Calculate requests per second"""
+        elapsed = monotonic() - self.start_time
+        if elapsed == 0:
+            return 0.0
+        return self.total_requests / elapsed
+    
+    @property
+    def error_rate(self):
+        """Calculate error rate (placeholder for now)"""
+        return 0.0
+    
+    def get_audit_logs(self):
+        """Get audit logs (placeholder for now)"""
+        return []
+
+metrics = MetricsTracker()
 pattern_detector = RegulatedPatternDetector()
 
 # -------------------- Presidio Integration --------------------
@@ -756,6 +840,8 @@ async def chat_stream_get(request: Request, q: str):
 @app.post("/assess-risk")
 async def assess_compliance_risk(text: str, region: Optional[str] = None):
     """Comprehensive compliance risk assessment"""
+    start_time = monotonic()
+    
     # Pattern-based assessment
     compliance_result = pattern_detector.assess_compliance_risk(text, region)
     
@@ -764,10 +850,24 @@ async def assess_compliance_risk(text: str, region: Optional[str] = None):
     
     # Combine results
     total_score = compliance_result.score + presidio_score
+    is_blocked = total_score >= settings.risk_threshold
+    
+    # Record metrics
+    processing_time = (monotonic() - start_time) * 1000  # Convert to ms
+    metrics.record_request(blocked=is_blocked, delay_ms=processing_time, risk_score=total_score)
+    
+    # Record pattern detections
+    for rule in compliance_result.triggered_rules:
+        pattern_name = rule.split(':')[0].strip()
+        metrics.record_pattern_detection(pattern_name)
+    
+    # Record Presidio detections
+    for entity in presidio_entities:
+        metrics.record_presidio_detection(entity.get('entity_type', 'unknown'))
     
     return {
         "score": total_score,
-        "blocked": total_score >= settings.risk_threshold,
+        "blocked": is_blocked,
         "pattern_score": compliance_result.score,
         "presidio_score": presidio_score,
         "triggered_rules": compliance_result.triggered_rules,
@@ -827,6 +927,41 @@ async def get_compliance_config():
         "enable_audit_logging": settings.enable_audit_logging,
         "hash_sensitive_data": settings.hash_sensitive_data,
         "audit_retention_days": settings.audit_retention_days
+    }
+
+@app.get("/metrics")
+async def get_metrics():
+    """Get real-time system metrics"""
+    return {
+        "total_requests": metrics.total_requests,
+        "blocked_requests": metrics.blocked_requests,
+        "block_rate": metrics.block_rate,
+        "avg_risk_score": metrics.avg_risk_score,
+        "pattern_detections": dict(metrics.pattern_detections),
+        "presidio_detections": dict(metrics.presidio_detections),
+        "performance_metrics": {
+            "avg_processing_time": metrics.avg_processing_time,
+            "avg_response_time": metrics.avg_response_time,
+            "requests_per_second": metrics.requests_per_second,
+            "error_rate": metrics.error_rate
+        }
+    }
+
+@app.get("/config")
+async def get_config():
+    """Get general system configuration"""
+    return {
+        "delay_tokens": settings.delay_tokens,
+        "delay_ms": settings.delay_ms,
+        "risk_threshold": settings.risk_threshold,
+        "default_model": settings.default_model,
+        "judge_model": settings.judge_model,
+        "enable_judge": settings.enable_judge,
+        "judge_threshold": settings.judge_threshold,
+        "enable_safe_rewrite": settings.enable_safe_rewrite,
+        "enable_audit_logging": settings.enable_audit_logging,
+        "hash_sensitive_data": settings.hash_sensitive_data,
+        "cors_origins": settings.get_cors_origins()
     }
 
 if __name__ == "__main__":
