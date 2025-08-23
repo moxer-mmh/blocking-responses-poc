@@ -83,7 +83,7 @@ const AuditLogs: React.FC = () => {
     setError(null)
     
     try {
-      const response = await apiClient.getAuditLogs({
+      const response = await apiClient.getComplianceAuditLogs({
         limit: 50,
         offset: 0,
         compliance_type: selectedComplianceType === 'all' ? undefined : selectedComplianceType,
@@ -241,7 +241,7 @@ const AuditLogs: React.FC = () => {
     setLoading(true)
     try {
       const newOffset = auditEvents.length
-      const response = await apiClient.getAuditLogs({
+      const response = await apiClient.getComplianceAuditLogs({
         limit: 50,
         offset: newOffset,
         compliance_type: selectedComplianceType === 'all' ? undefined : selectedComplianceType,

@@ -20,6 +20,7 @@ import MetricsChart from '@/components/charts/MetricsChart'
 import ComplianceBreakdown from '@/components/charts/ComplianceBreakdown'
 import RecentActivity from '@/components/RecentActivity'
 import { apiClient } from '@/utils/api'
+import { AuditEvent } from '@/types'
 
 const Dashboard: React.FC = () => {
   const {
@@ -77,10 +78,10 @@ const Dashboard: React.FC = () => {
 
   const handleExportAuditReport = async () => {
     try {
-      const response = await apiClient.getAuditLogs({ limit: 1000 })
+      const response = await apiClient.getAuditLogs(1000)
       if (response.success && response.data) {
         // Create CSV data
-        const csvData = response.data.events.map(event => ({
+        const csvData = response.data.logs.map((event: AuditEvent) => ({
           timestamp: event.timestamp,
           event_type: event.event_type,
           compliance_type: event.compliance_type,
@@ -92,7 +93,7 @@ const Dashboard: React.FC = () => {
         // Convert to CSV string
         const csvContent = [
           'Timestamp,Event Type,Compliance Type,Risk Score,Blocked,Session ID',
-          ...csvData.map(row => 
+          ...csvData.map((row: any) => 
             `${row.timestamp},${row.event_type},${row.compliance_type},${row.risk_score},${row.blocked},${row.session_id}`
           )
         ].join('\n')
@@ -141,9 +142,9 @@ const Dashboard: React.FC = () => {
           }
           
           // Fetch recent audit events for dashboard components
-          const auditResponse = await apiClient.getAuditLogs({ limit: 50 })
+          const auditResponse = await apiClient.getAuditLogs(50)
           if (auditResponse.success && auditResponse.data) {
-            setAuditEvents(auditResponse.data.events || [])
+            setAuditEvents(auditResponse.data.logs || [])
           }
         } catch (error) {
           console.error('Failed to fetch dashboard data:', error)

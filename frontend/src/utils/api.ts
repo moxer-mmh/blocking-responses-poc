@@ -137,8 +137,17 @@ class ApiClient {
     }>('/test/suites')
   }
 
-  // Audit endpoints
-  async getAuditLogs(filters: {
+  // Simple audit logs endpoint
+  async getAuditLogs(limit: number = 100) {
+    return this.request<{
+      logs: AuditEvent[]
+      count: number
+      total_available: number
+    }>(`/audit-logs?limit=${limit}`)
+  }
+
+  // Compliance audit logs with filters
+  async getComplianceAuditLogs(filters: {
     limit?: number
     offset?: number
     compliance_type?: string
@@ -166,6 +175,7 @@ class ApiClient {
     model?: string
     compliance_type?: string
     threshold?: number
+    api_key?: string
   }) {
     return this.request<{ session_id: string; stream_url: string }>(
       '/chat/stream',

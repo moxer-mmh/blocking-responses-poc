@@ -144,10 +144,32 @@ export interface DashboardState {
   testSuiteResults: TestSuite[]
   liveStream: LiveStreamData | null
   realtimeMetrics: MetricsSummary
+  historicalMetrics: HistoricalMetricPoint[]
   auditEvents: AuditEvent[]
   isConnected: boolean
   lastUpdate: string
   testOutput: string
+}
+
+// Notification types
+export interface Notification {
+  id: string
+  type: 'info' | 'success' | 'warning' | 'error'
+  title: string
+  message: string
+  timestamp: string
+  read: boolean
+}
+
+// Historical metrics for charts
+export interface HistoricalMetricPoint {
+  timestamp: string
+  total_requests: number
+  blocked_requests: number
+  block_rate: number
+  avg_risk_score: number
+  avg_processing_time: number
+  requests_per_second: number
 }
 
 // API Response types

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { devtools, subscribeWithSelector } from 'zustand/middleware'
-import { DashboardState, TestSuite, LiveStreamData, MetricsSummary, AuditEvent, ComplianceType } from '@/types'
+import { DashboardState, TestSuite, LiveStreamData, MetricsSummary, AuditEvent, ComplianceType, HistoricalMetricPoint } from '@/types'
 import { storage } from '@/utils'
 
 interface DashboardStore extends DashboardState {
@@ -24,6 +24,8 @@ interface DashboardStore extends DashboardState {
   
   // Metrics actions
   updateMetrics: (metrics: Partial<MetricsSummary>) => void
+  addHistoricalMetric: (metric: HistoricalMetricPoint) => void
+  clearHistoricalMetrics: () => void
   
   // Audit actions
   addAuditEvents: (events: AuditEvent[]) => void
@@ -54,6 +56,7 @@ const initialState: DashboardState = {
       error_rate: 0,
     },
   },
+  historicalMetrics: [],
   auditEvents: [],
   isConnected: false,
   lastUpdate: new Date().toISOString(),
@@ -76,7 +79,7 @@ export const useDashboardStore = create<DashboardStore>()(
       setSelectedComplianceType: (type) => 
         set({ selectedComplianceType: type }, false, 'setSelectedComplianceType'),
       
-      setIsConnected: (connected) => 
+      setIsConnected: (connected) =>
         set({ isConnected: connected }, false, 'setIsConnected'),
       
       // Test suite actions
@@ -143,6 +146,22 @@ export const useDashboardStore = create<DashboardStore>()(
           false,
           'updateMetrics'
         ),
+
+      addHistoricalMetric: (metric) =>
+        set(
+          (state) => {
+            const newHistoricalMetrics = [metric, ...state.historicalMetrics]
+            // Keep more data points for better chart visualization (about 30 minutes at 10-second intervals)
+            return {
+              historicalMetrics: newHistoricalMetrics.slice(0, 180)
+            }
+          },
+          false,
+          'addHistoricalMetric'
+        ),
+
+      clearHistoricalMetrics: () =>
+        set({ historicalMetrics: [] }, false, 'clearHistoricalMetrics'),
       
       // Audit actions
       addAuditEvents: (events) =>

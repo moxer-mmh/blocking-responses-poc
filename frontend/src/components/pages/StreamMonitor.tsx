@@ -59,6 +59,9 @@ const StreamMonitor: React.FC = () => {
     setRiskScores([])
     
     try {
+      // Get API key from localStorage
+      const apiKey = localStorage.getItem('openai_api_key')
+      
       const response = await fetch('http://localhost:8000/chat/stream', {
         method: 'POST',
         headers: {
@@ -68,7 +71,8 @@ const StreamMonitor: React.FC = () => {
           message,
           delay_tokens: 5,
           delay_ms: 100,
-          risk_threshold: 1.0
+          risk_threshold: 1.0,
+          ...(apiKey && { api_key: apiKey })
         })
       })
 

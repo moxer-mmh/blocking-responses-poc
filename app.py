@@ -144,6 +144,7 @@ class ChatRequest(BaseModel):
     risk_threshold: Optional[float] = Field(None, ge=0.0, le=5.0)
     enable_safe_rewrite: Optional[bool] = None
     region: Optional[str] = Field(None, description="Compliance region: US, EU, HIPAA, PCI")
+    api_key: Optional[str] = Field(None, description="OpenAI API key (overrides environment variable)")
 
 class ComplianceResult(BaseModel):
     score: float
@@ -743,7 +744,7 @@ async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
     )
 
 # -------------------- LLM Streaming --------------------
-async def upstream_stream(user_input: str, model: str = None) -> AsyncIterator[str]:
+async def upstream_stream(user_input: str, model: str = None, api_key: str = None) -> AsyncIterator[str]:
     """Stream from upstream LLM"""
     system_prompt = (
         "You are a helpful, professional assistant for regulated industries. "
@@ -761,7 +762,7 @@ async def upstream_stream(user_input: str, model: str = None) -> AsyncIterator[s
         model=model or settings.default_model,
         streaming=True,
         temperature=0.3,
-        api_key=settings.openai_api_key
+        api_key=api_key or settings.openai_api_key
     )
     
     chain = prompt | llm | StrOutputParser()
@@ -773,7 +774,7 @@ async def upstream_stream(user_input: str, model: str = None) -> AsyncIterator[s
         logger.error(f"Upstream streaming error: {e}")
         yield f"[Error: {str(e)}]"
 
-async def safe_rewrite_stream(user_input: str, detected_types: List[str]) -> AsyncIterator[str]:
+async def safe_rewrite_stream(user_input: str, detected_types: List[str], api_key: str = None) -> AsyncIterator[str]:
     """Generate a safe, compliant rewrite of the response"""
     if not settings.enable_safe_rewrite:
         yield "I cannot provide a response due to compliance restrictions."
@@ -807,7 +808,7 @@ async def safe_rewrite_stream(user_input: str, detected_types: List[str]) -> Asy
         model=settings.judge_model,
         streaming=True,
         temperature=settings.rewrite_temperature,
-        api_key=settings.openai_api_key
+        api_key=api_key or settings.openai_api_key
     )
     
     chain = prompt | llm | StrOutputParser()
@@ -935,8 +936,9 @@ async def get_audit_logs(limit: int = 100, event_type: Optional[str] = None) -> 
 async def chat_stream_sse(request: Request, chat_req: ChatRequest):
     """SSE endpoint with regulated industry compliance"""
     
-    # Check if we have OpenAI API key, if not use demo mode
-    use_demo_mode = not settings.openai_api_key or settings.openai_api_key == "your_openai_api_key_here"
+    # Use API key from request if provided, otherwise fall back to environment variable
+    api_key = chat_req.api_key or settings.openai_api_key
+    use_demo_mode = not api_key or api_key == "your_openai_api_key_here"
     
     if use_demo_mode:
         return await chat_stream_demo_mode(request, chat_req)
@@ -1008,7 +1010,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
             nonlocal window_text, vetoed, max_risk_score, all_triggered_rules
             
             try:
-                async for piece in upstream_stream(chat_req.message, chat_req.model):
+                async for piece in upstream_stream(chat_req.message, chat_req.model, api_key):
                     if vetoed:
                         break
                     
@@ -1060,7 +1062,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                         await emit_event("Content blocked for compliance", event="notice")
                         
                         # Stream safe rewrite
-                        async for safe_piece in safe_rewrite_stream(chat_req.message, all_triggered_rules):
+                        async for safe_piece in safe_rewrite_stream(chat_req.message, all_triggered_rules, api_key):
                             await emit_event(safe_piece)
                         
                         await emit_event("[DONE]", event="done")
