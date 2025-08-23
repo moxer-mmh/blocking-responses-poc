@@ -1,34 +1,218 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Square, Settings, Send } from 'lucide-react'
+import { Play, Square, Send, Download } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge, RiskBadge } from '@/components/ui/Badge'
 import { useConnection } from '@/utils/useConnection'
+import { useNotifications } from '@/components/ui/Notifications'
+
+interface StreamToken {
+  text: string
+  risk: number
+  timestamp: string
+  blocked?: boolean
+  entities?: string[]
+  patterns?: string[]
+}
+
+interface StreamEvent {
+  id: number
+  type: string
+  timestamp: string
+  description: string
+  risk?: number
+  entities?: string[]
+  patterns?: string[]
+}
 
 const StreamMonitor: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false)
   const [message, setMessage] = useState('Tell me about patient John Doe with SSN 123-45-6789')
+  const [tokens, setTokens] = useState<StreamToken[]>([])
+  const [events, setEvents] = useState<StreamEvent[]>([])
+  const [currentResponse, setCurrentResponse] = useState('')
+  const [sessionId, setSessionId] = useState('')
+  const [riskScores, setRiskScores] = useState<number[]>([])
+  const evtSourceRef = useRef<EventSource | null>(null)
   const isConnected = useConnection()
+  const { success, error, warning, info } = useNotifications()
 
-  const mockStreamData = {
-    tokens: [
-      { text: 'I', risk: 0.0, timestamp: '14:32:01.123' },
-      { text: ' can', risk: 0.0, timestamp: '14:32:01.156' },
-      { text: ' help', risk: 0.1, timestamp: '14:32:01.189' },
-      { text: ' with', risk: 0.1, timestamp: '14:32:01.223' },
-      { text: ' patient', risk: 0.7, timestamp: '14:32:01.256' },
-      { text: ' information', risk: 0.8, timestamp: '14:32:01.289' },
-      { text: '.', risk: 0.3, timestamp: '14:32:01.323' },
-      { text: ' John', risk: 0.9, timestamp: '14:32:01.356' },
-      { text: ' Doe', risk: 1.1, timestamp: '14:32:01.389', blocked: true },
-    ]
+  useEffect(() => {
+    return () => {
+      if (evtSourceRef.current) {
+        evtSourceRef.current.close()
+      }
+    }
+  }, [])
+
+  const handleStartStream = async () => {
+    if (!message.trim()) {
+      warning('Invalid Input', 'Please enter a message to stream')
+      return
+    }
+
+    setIsStreaming(true)
+    setTokens([])
+    setEvents([])
+    setCurrentResponse('')
+    setRiskScores([])
+    
+    try {
+      const response = await fetch('http://localhost:8000/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message,
+          delay_tokens: 5,
+          delay_ms: 100,
+          risk_threshold: 1.0
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No reader available')
+      }
+
+      info('Stream Started', `Processing: "${message.slice(0, 50)}${message.length > 50 ? '...' : ''}"`)
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataContent = line.slice(6)
+            
+            // Handle [DONE] message
+            if (dataContent === '[DONE]') {
+              setIsStreaming(false)
+              continue
+            }
+            
+            try {
+              const data = JSON.parse(dataContent)
+              
+              if (data.type === 'chunk') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                setTokens(prev => [...prev, {
+                  text: data.content,
+                  risk: data.risk_score || 0,
+                  timestamp,
+                  entities: data.entities || [],
+                  patterns: data.patterns || []
+                }])
+                setCurrentResponse(prev => prev + data.content)
+                setRiskScores(prev => [...prev, data.risk_score || 0])
+              }
+              
+              if (data.type === 'risk_alert') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                setEvents(prev => [...prev, {
+                  id: prev.length + 1,
+                  type: 'risk_alert',
+                  timestamp,
+                  description: `High risk detected: ${data.content}`,
+                  risk: data.risk_score,
+                  entities: data.entities,
+                  patterns: data.patterns
+                }])
+                warning('Risk Alert', `Token "${data.content}" scored ${data.risk_score?.toFixed(2)}`)
+              }
+              
+              if (data.type === 'blocked') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                setTokens(prev => prev.map((token, idx) => 
+                  idx === prev.length - 1 ? { ...token, blocked: true } : token
+                ))
+                setEvents(prev => [...prev, {
+                  id: prev.length + 1,
+                  type: 'blocked',
+                  timestamp,
+                  description: `Stream blocked: ${data.reason}`,
+                  risk: data.risk_score
+                }])
+                error('Stream Blocked', data.reason || 'Content violated compliance policies')
+                setIsStreaming(false)
+                break
+              }
+              
+              if (data.type === 'completed') {
+                setSessionId(data.session_id)
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                setEvents(prev => [...prev, {
+                  id: prev.length + 1,
+                  type: 'completed',
+                  timestamp,
+                  description: `Stream completed successfully`
+                }])
+                success('Stream Completed', `Session ${data.session_id} finished successfully`)
+                setIsStreaming(false)
+                break
+              }
+              
+            } catch (e) {
+              console.warn('Failed to parse SSE data:', line)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      error('Stream Error', `Failed to start stream: ${err}`)
+      setIsStreaming(false)
+    }
   }
 
-  const handleStartStream = () => {
-    setIsStreaming(true)
-    // Simulate streaming
-    setTimeout(() => setIsStreaming(false), 3000)
+  const handleStopStream = () => {
+    if (evtSourceRef.current) {
+      evtSourceRef.current.close()
+      evtSourceRef.current = null
+    }
+    setIsStreaming(false)
+    info('Stream Stopped', 'Stream manually stopped by user')
+  }
+
+  const handleExportSession = () => {
+    if (!sessionId && tokens.length === 0) {
+      warning('No Data', 'No stream session data to export')
+      return
+    }
+
+    const exportData = {
+      sessionId: sessionId || 'unsaved',
+      message,
+      timestamp: new Date().toISOString(),
+      tokens,
+      events,
+      response: currentResponse,
+      riskScores,
+      maxRisk: Math.max(...riskScores, 0),
+      tokenCount: tokens.length
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `stream-session-${sessionId || Date.now()}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    success('Export Complete', `Session data exported as stream-session-${sessionId || Date.now()}.json`)
   }
 
 
@@ -50,14 +234,21 @@ const StreamMonitor: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-3">
-          <Button variant="outline" size="sm">
-            <Settings className="w-4 h-4 mr-2" />
-            Stream Settings
-          </Button>
+          {!isStreaming && tokens.length > 0 && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleExportSession}
+              icon={<Download className="w-4 h-4" />}
+            >
+              Export Session
+            </Button>
+          )}
           <Button 
             variant={isStreaming ? "danger" : "primary"}
-            onClick={() => isStreaming ? setIsStreaming(false) : handleStartStream()}
+            onClick={() => isStreaming ? handleStopStream() : handleStartStream()}
             icon={isStreaming ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            disabled={isStreaming ? false : !message.trim()}
           >
             {isStreaming ? 'Stop Stream' : 'Start Stream'}
           </Button>
@@ -131,14 +322,14 @@ const StreamMonitor: React.FC = () => {
             <CardContent>
               <div className="space-y-3 min-h-[300px]">
                 <AnimatePresence mode="popLayout">
-                  {mockStreamData.tokens.map((token, index) => (
+                  {tokens.map((token, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -20, scale: 0.8 }}
                       animate={{ opacity: 1, x: 0, scale: 1 }}
                       exit={{ opacity: 0, x: 20, scale: 0.8 }}
                       transition={{ 
-                        delay: isStreaming ? index * 0.3 : 0,
+                        delay: isStreaming ? index * 0.1 : 0,
                         duration: 0.2 
                       }}
                       className={`
@@ -162,6 +353,15 @@ const StreamMonitor: React.FC = () => {
                             BLOCKED
                           </Badge>
                         )}
+                        {token.entities && token.entities.length > 0 && (
+                          <div className="flex space-x-1">
+                            {token.entities.map((entity, idx) => (
+                              <Badge key={idx} variant="warning" size="sm">
+                                {typeof entity === 'string' ? entity : ((entity as any)?.entity_type || 'Unknown')}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2">
                         <RiskBadge score={token.risk} />
@@ -173,11 +373,20 @@ const StreamMonitor: React.FC = () => {
                   ))}
                 </AnimatePresence>
                 
-                {!isStreaming && mockStreamData.tokens.length === 0 && (
+                {!isStreaming && tokens.length === 0 && (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <div className="text-4xl mb-4">🎯</div>
                     <p className="font-medium mb-2">No stream active</p>
                     <p className="text-sm">Start a stream to see token-by-token analysis</p>
+                  </div>
+                )}
+
+                {isStreaming && tokens.length === 0 && (
+                  <div className="flex items-center justify-center h-48 text-blue-500">
+                    <div className="text-center">
+                      <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
+                      <p>Starting stream...</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -196,61 +405,71 @@ const StreamMonitor: React.FC = () => {
               <CardTitle size="sm">Decision Timeline</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4 min-h-[300px]">
-                <div className="flex items-start space-x-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 bg-green-500 rounded-full" />
-                    <div className="w-px h-8 bg-gray-200 dark:bg-gray-700" />
-                  </div>
-                  <div className="flex-1 pb-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium">Stream Started</span>
-                      <span className="text-xs text-gray-500">14:32:01.123</span>
+              <div className="space-y-4 min-h-[300px] max-h-[400px] overflow-y-auto">
+                {events.length > 0 ? (
+                  events.map((event, index) => (
+                    <div key={event.id} className="flex items-start space-x-4">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-3 h-3 rounded-full ${
+                          event.type === 'blocked' ? 'bg-red-500' :
+                          event.type === 'risk_alert' ? 'bg-yellow-500' :
+                          event.type === 'completed' ? 'bg-green-500' :
+                          'bg-blue-500'
+                        }`} />
+                        {index < events.length - 1 && (
+                          <div className="w-px h-8 bg-gray-200 dark:bg-gray-700" />
+                        )}
+                      </div>
+                      <div className="flex-1 pb-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium capitalize">
+                            {event.type.replace('_', ' ')}
+                          </span>
+                          <span className="text-xs text-gray-500 font-mono">
+                            {event.timestamp}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {event.description}
+                        </p>
+                        {event.entities && event.entities.length > 0 && (
+                          <div className="flex space-x-1 mt-2">
+                            {event.entities.map((entity, idx) => (
+                              <Badge key={idx} variant="warning" size="sm">
+                                {typeof entity === 'string' ? entity : ((entity as any)?.entity_type || 'Unknown')}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {event.patterns && event.patterns.length > 0 && (
+                          <div className="flex space-x-1 mt-2">
+                            {event.patterns.map((pattern, idx) => (
+                              <Badge key={idx} variant="info" size="sm">
+                                {pattern}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {event.risk !== undefined && (
+                          <div className="mt-2">
+                            <RiskBadge score={event.risk} />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Processing message: "{message.slice(0, 50)}..."
-                    </p>
+                  ))
+                ) : !isStreaming ? (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <div className="text-4xl mb-4">📋</div>
+                    <p className="font-medium mb-2">No events yet</p>
+                    <p className="text-sm">Start streaming to see decision timeline</p>
                   </div>
-                </div>
-
-                <div className="flex items-start space-x-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full" />
-                    <div className="w-px h-8 bg-gray-200 dark:bg-gray-700" />
+                ) : (
+                  <div className="text-center py-12 text-blue-500">
+                    <div className="animate-pulse text-2xl mb-4">⏳</div>
+                    <p>Waiting for stream events...</p>
                   </div>
-                  <div className="flex-1 pb-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium">Risk Threshold Exceeded</span>
-                      <span className="text-xs text-gray-500">14:32:01.356</span>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Token "John" scored 0.9, approaching block threshold
-                    </p>
-                    <div className="flex space-x-2 mt-2">
-                      <Badge variant="warning" size="sm">PHI Detected</Badge>
-                      <Badge variant="info" size="sm">Name Pattern</Badge>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 bg-red-500 rounded-full" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium">Stream Blocked</span>
-                      <span className="text-xs text-gray-500">14:32:01.389</span>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Token "Doe" pushed cumulative score to 1.1, exceeding threshold
-                    </p>
-                    <div className="flex space-x-2 mt-2">
-                      <Badge variant="danger" size="sm">BLOCKED</Badge>
-                      <Badge variant="warning" size="sm">HIPAA Violation</Badge>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -265,14 +484,102 @@ const StreamMonitor: React.FC = () => {
       >
         <Card>
           <CardHeader>
-            <CardTitle size="sm">Real-time Risk Scoring</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle size="sm">Real-time Risk Scoring</CardTitle>
+              {riskScores.length > 0 && (
+                <div className="flex items-center space-x-4 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-gray-600 dark:text-gray-400">Current:</span>
+                    <RiskBadge score={riskScores[riskScores.length - 1]} />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-gray-600 dark:text-gray-400">Max:</span>
+                    <RiskBadge score={Math.max(...riskScores)} />
+                  </div>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="h-32 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-              <p className="text-gray-500 dark:text-gray-400">
-                Risk score visualization will appear here during streaming
-              </p>
-            </div>
+            {riskScores.length > 0 ? (
+              <div className="space-y-4">
+                {/* Simple Risk Score Chart */}
+                <div className="h-32 bg-gray-50 dark:bg-gray-800 rounded-lg p-4 relative overflow-hidden">
+                  <div className="absolute inset-0 p-4">
+                    <div className="relative h-full">
+                      {/* Risk threshold line */}
+                      <div className="absolute inset-x-4 top-4 border-t-2 border-red-300 border-dashed"></div>
+                      <span className="absolute right-2 top-2 text-xs text-red-500">Risk Threshold (1.0)</span>
+                      
+                      {/* Risk score line */}
+                      <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${Math.max(riskScores.length - 1, 1)} 2`}>
+                        <polyline
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="0.05"
+                          className="text-blue-500"
+                          points={riskScores.map((score, index) => `${index},${2 - Math.min(score, 2)}`).join(' ')}
+                        />
+                        {riskScores.map((score, index) => (
+                          <circle
+                            key={index}
+                            cx={index}
+                            cy={2 - Math.min(score, 2)}
+                            r="0.03"
+                            className={score >= 1.0 ? "fill-red-500" : score >= 0.7 ? "fill-orange-500" : "fill-blue-500"}
+                          />
+                        ))}
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Session Statistics */}
+                <div className="grid grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {tokens.length}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Tokens</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">
+                      {tokens.filter(t => t.blocked).length}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Blocked</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {riskScores.filter(s => s >= 0.7).length}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">High Risk</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {currentResponse.length}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Characters</div>
+                  </div>
+                </div>
+
+                {/* Current Response Preview */}
+                {currentResponse && (
+                  <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Current Response:</div>
+                    <div className="text-sm font-mono text-gray-900 dark:text-white max-h-20 overflow-y-auto">
+                      {currentResponse}
+                      {isStreaming && <span className="animate-pulse">▋</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-32 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                <p className="text-gray-500 dark:text-gray-400">
+                  {isStreaming ? "Waiting for risk data..." : "Risk score visualization will appear here during streaming"}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>

@@ -1,14 +1,45 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Play, RefreshCw, Download, Settings } from 'lucide-react'
+import {
+  Play,
+  Download,
+  Settings,
+  RefreshCw,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { StatusBadge } from '@/components/ui/Badge'
+import { Badge } from '@/components/ui/Badge'
+import { useNotifications } from '@/components/ui/Notifications'
 import { useConnection } from '@/utils/useConnection'
 import { apiClient } from '@/utils/api'
 
+// Status badge component
+const StatusBadge: React.FC<{ status: string; animate?: boolean }> = ({ status, animate }) => {
+  const getVariant = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'success'
+      case 'running':
+        return 'info'
+      case 'failed':
+        return 'danger'
+      case 'pending':
+        return 'secondary'
+      default:
+        return 'secondary'
+    }
+  }
+
+  return (
+    <Badge variant={getVariant(status)} className={animate ? 'animate-pulse' : ''}>
+      {status}
+    </Badge>
+  )
+}
+
 const TestSuite: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false)
+  const { success, error } = useNotifications()
   const [testSuites, setTestSuites] = useState<any[]>([
     {
       id: 'basic',
@@ -48,12 +79,40 @@ const TestSuite: React.FC = () => {
     }
   ])
   const [testOutput, setTestOutput] = useState<string>('')
+  const [runningTests, setRunningTests] = useState<string[]>([])
+  const [pollingInterval, setPollingInterval] = useState<number | null>(null)
   const isConnected = useConnection()
 
   // Load test suites on component mount
   useEffect(() => {
     loadTestSuites()
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+      }
+    }
   }, [isConnected])
+
+  // Start polling when tests are running
+  useEffect(() => {
+    if (runningTests.length > 0 || isRunning) {
+      const interval = setInterval(() => {
+        loadTestSuites()
+      }, 2000) // Poll every 2 seconds
+      setPollingInterval(interval)
+    } else {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+        setPollingInterval(null)
+      }
+    }
+
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+      }
+    }
+  }, [runningTests, isRunning])
 
   const loadTestSuites = async () => {
     if (!isConnected) return
@@ -75,7 +134,7 @@ const TestSuite: React.FC = () => {
     setTestOutput('🚀 Starting test suite execution...\n')
     
     try {
-      const response = await apiClient.runTestSuite(['basic', 'patterns'])
+      const response = await apiClient.runTestSuite(['basic', 'patterns', 'presidio', 'streaming'])
       if (response.success && response.data) {
         const data = response.data
         setTestOutput(prev => prev + `✅ Test session started: ${data.session_id}\n`)
@@ -100,7 +159,8 @@ const TestSuite: React.FC = () => {
   const handleRunSingleSuite = async (suiteId: string) => {
     if (!isConnected) return
     
-    setTestOutput(`🔄 Running ${suiteId} suite...\n`)
+    setRunningTests(prev => [...prev, suiteId])
+    setTestOutput(`🔄 Running ${suiteId} suite...\n`) // Clear and start fresh
     
     try {
       const response = await apiClient.runTestSuite([suiteId])
@@ -110,10 +170,130 @@ const TestSuite: React.FC = () => {
         if (data.output) {
           setTestOutput(prev => prev + data.output + '\n')
         }
+        // Reload test suites to update status
+        await loadTestSuites()
+      } else {
+        setTestOutput(prev => prev + `❌ Error running ${suiteId}: ${response.error}\n`)
       }
     } catch (error) {
-      setTestOutput(prev => prev + `❌ ${suiteId} failed: ${error}\n`)
+      setTestOutput(prev => prev + `💥 Exception running ${suiteId}: ${error}\n`)
+    } finally {
+      setRunningTests(prev => prev.filter(id => id !== suiteId))
     }
+  }
+
+    const handleDownloadTestResults = (format: 'csv' | 'json' | 'pdf') => {
+    const generateCSV = (data: any[]) => {
+      const headers = ['Test Suite', 'Status', 'Passed', 'Failed', 'Warnings', 'Total']
+      const rows = data.map((suite: any) => [
+        suite.name,
+        suite.status,
+        suite.passed.toString(),
+        suite.failed.toString(),
+        suite.warnings.toString(),
+        suite.total.toString()
+      ])
+      
+      const csvContent = [headers, ...rows]
+        .map(row => row.map((field: any) => `"${field}"`).join(','))
+        .join('\n')
+      
+      return csvContent
+    }
+
+    const generateJSON = (data: any[]) => {
+      return JSON.stringify(data, null, 2)
+    }
+
+    const generatePDF = (data: any[]) => {
+      // Simple PDF-like text format
+      let content = 'TEST RESULTS REPORT\n'
+      content += '==================\n\n'
+      content += `Generated: ${new Date().toLocaleDateString()}\n\n`
+      
+      data.forEach((suite: any) => {
+        content += `${suite.name}\n`
+        content += `Status: ${suite.status}\n`
+        content += `Passed: ${suite.passed}, Failed: ${suite.failed}, Warnings: ${suite.warnings}\n`
+        content += `Total: ${suite.total}\n\n`
+      })
+      
+      return content
+    }
+
+    try {
+      const currentTestResults = testSuites.map(suite => ({
+        name: suite.name,
+        status: suite.status || 'Not Run',
+        passed: suite.passed || 0,
+        failed: suite.failed || 0,
+        warnings: suite.warnings || 0,
+        total: suite.total || suite.tests || 0
+      }))
+
+      let content: string
+      let filename: string
+      let mimeType: string
+
+      switch (format) {
+        case 'csv':
+          content = generateCSV(currentTestResults)
+          filename = `test-results-${new Date().toISOString().split('T')[0]}.csv`
+          mimeType = 'text/csv'
+          break
+        case 'json':
+          content = generateJSON(currentTestResults)
+          filename = `test-results-${new Date().toISOString().split('T')[0]}.json`
+          mimeType = 'application/json'
+          break
+        case 'pdf':
+          content = generatePDF(currentTestResults)
+          filename = `test-results-${new Date().toISOString().split('T')[0]}.txt`
+          mimeType = 'text/plain'
+          break
+        default:
+          throw new Error('Unsupported format')
+      }
+
+      const blob = new Blob([content], { type: mimeType })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      success('Download Complete', `Test results downloaded as ${filename}`)
+    } catch (err) {
+      console.error('Download failed:', err)
+      error('Download Failed', 'Failed to download test results')
+    }
+  }
+
+  const [showConfigModal, setShowConfigModal] = useState(false)
+  const [testConfig, setTestConfig] = useState({
+    timeout: 60,
+    verboseOutput: true,
+    parallelExecution: false,
+    coverageReports: true,
+    continueOnFailure: false,
+    showWarnings: true
+  })
+
+  const handleConfigure = () => {
+    setShowConfigModal(true)
+  }
+
+  const handleSaveConfig = () => {
+    setShowConfigModal(false)
+    success('Configuration Saved', 'Test configuration updated successfully!')
+  }
+
+  const clearTestOutput = () => {
+    setTestOutput('')
+    success('Output Cleared', 'Test output has been cleared!')
   }
 
   return (
@@ -134,7 +314,7 @@ const TestSuite: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-3">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleConfigure}>
             <Settings className="w-4 h-4 mr-2" />
             Configure
           </Button>
@@ -215,7 +395,7 @@ const TestSuite: React.FC = () => {
                   </div>
 
                   {/* Test Results */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-2">
                     <div className="text-center">
                       <div className="text-2xl font-bold text-success-600 dark:text-success-400">
                         {suite.passed}
@@ -232,6 +412,14 @@ const TestSuite: React.FC = () => {
                         Failed
                       </div>
                     </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-warning-600 dark:text-warning-400">
+                        {(suite as any).warnings || 0}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Warnings
+                      </div>
+                    </div>
                   </div>
 
                   {/* Actions */}
@@ -240,13 +428,17 @@ const TestSuite: React.FC = () => {
                       variant="secondary" 
                       size="sm" 
                       className="flex-1"
-                      disabled={isRunning}
+                      disabled={isRunning || runningTests.includes(suite.id)}
                       onClick={() => handleRunSingleSuite(suite.id)}
                     >
-                      <Play className="w-3 h-3 mr-1" />
-                      Run
+                      {runningTests.includes(suite.id) ? (
+                        <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <Play className="w-3 h-3 mr-1" />
+                      )}
+                      {runningTests.includes(suite.id) ? 'Running...' : 'Run'}
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={() => handleDownloadTestResults(suite.id)}>
                       <Download className="w-3 h-3" />
                     </Button>
                   </div>
@@ -265,7 +457,19 @@ const TestSuite: React.FC = () => {
       >
         <Card>
           <CardHeader>
-            <CardTitle>Live Test Output</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Live Test Output</CardTitle>
+              {testOutput && (
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  onClick={clearTestOutput}
+                  className="text-xs"
+                >
+                  Clear Output
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-4 font-mono text-sm min-h-[300px] max-h-[400px] overflow-y-auto">
@@ -287,6 +491,98 @@ const TestSuite: React.FC = () => {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Configuration Modal */}
+      {showConfigModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96 max-w-lg border dark:border-gray-700">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Test Configuration</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Test Timeout (seconds)</label>
+                <input
+                  type="number"
+                  value={testConfig.timeout}
+                  onChange={(e) => setTestConfig({...testConfig, timeout: parseInt(e.target.value)})}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min="10"
+                  max="300"
+                />
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="verboseOutput"
+                  checked={testConfig.verboseOutput}
+                  onChange={(e) => setTestConfig({...testConfig, verboseOutput: e.target.checked})}
+                  className="mr-3 w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="verboseOutput" className="text-sm text-gray-700 dark:text-gray-300">Verbose output</label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="parallelExecution"
+                  checked={testConfig.parallelExecution}
+                  onChange={(e) => setTestConfig({...testConfig, parallelExecution: e.target.checked})}
+                  className="mr-3 w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="parallelExecution" className="text-sm text-gray-700 dark:text-gray-300">Parallel execution</label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="coverageReports"
+                  checked={testConfig.coverageReports}
+                  onChange={(e) => setTestConfig({...testConfig, coverageReports: e.target.checked})}
+                  className="mr-3 w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="coverageReports" className="text-sm text-gray-700 dark:text-gray-300">Generate coverage reports</label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="continueOnFailure"
+                  checked={testConfig.continueOnFailure}
+                  onChange={(e) => setTestConfig({...testConfig, continueOnFailure: e.target.checked})}
+                  className="mr-3 w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="continueOnFailure" className="text-sm text-gray-700 dark:text-gray-300">Continue on failure</label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="showWarnings"
+                  checked={testConfig.showWarnings}
+                  onChange={(e) => setTestConfig({...testConfig, showWarnings: e.target.checked})}
+                  className="mr-3 w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="showWarnings" className="text-sm text-gray-700 dark:text-gray-300">Show warnings</label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <Button
+                variant="secondary"
+                onClick={() => setShowConfigModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveConfig}
+              >
+                Save Configuration
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

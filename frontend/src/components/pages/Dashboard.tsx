@@ -11,6 +11,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge, RiskBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { useNotifications } from '@/components/ui/Notifications'
 import { useDashboardStore, useTestSuiteStats } from '@/stores/dashboard'
 import { formatNumber, formatPercent, formatters } from '@/utils'
 import { useConnection } from '@/utils/useConnection'
@@ -30,25 +31,31 @@ const Dashboard: React.FC = () => {
 
   const isConnected = useConnection()
   const testStats = useTestSuiteStats()
+  const { success, error } = useNotifications()
 
   // Quick Action handlers
   const handleRunTestSuite = async () => {
     try {
       const response = await apiClient.runTestSuite(['basic', 'patterns'])
-      if (response.success) {
+      if (response.success && response.data) {
         // Navigate to test suite page
         setActiveView('testing')
-        console.log('Test suite started:', response.data?.session_id)
+        // Show success notification with actual results
+        const { passed, failed, total } = response.data.summary || { passed: 0, failed: 0, total: 0 }
+        success(
+          'Test Suite Completed!',
+          `Results: ${passed} passed, ${failed} failed, ${total} total tests. Session: ${response.data.session_id}`
+        )
       } else {
-        console.error('Failed to start test suite:', response.error)
+        error('Test Suite Failed', response.error || 'Unknown error occurred')
       }
-    } catch (error) {
-      console.error('Error starting test suite:', error)
+    } catch (err) {
+      error('Test Suite Error', `Failed to start test suite: ${err}`)
     }
   }
 
-  const handleViewLiveStream = () => {
-    // Navigate to stream monitor
+    const handleViewLiveStream = () => {
+    // Navigate to stream monitor page
     setActiveView('stream')
   }
 
@@ -94,12 +101,15 @@ const Dashboard: React.FC = () => {
     try {
       const response = await apiClient.getHealth()
       if (response.success) {
-        alert(`System Status: ${response.data?.status}\nVersion: ${response.data?.version}\nAll dependencies healthy!`)
+        success(
+          'System Healthy',
+          `Status: ${response.data?.status} | Version: ${response.data?.version} | All dependencies operational`
+        )
       } else {
-        alert(`System Health Check Failed: ${response.error}`)
+        error('Health Check Failed', response.error || 'Unknown error occurred')
       }
-    } catch (error) {
-      alert(`Health Check Error: ${error}`)
+    } catch (err) {
+      error('Health Check Error', `Failed to check system health: ${err}`)
     }
   }
 

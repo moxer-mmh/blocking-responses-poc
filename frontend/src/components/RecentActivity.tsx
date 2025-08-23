@@ -114,17 +114,22 @@ const RecentActivity: React.FC = () => {
                   {/* Detected Entities */}
                   {event.entities_detected.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
-                      {event.entities_detected.slice(0, 3).map((entity, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400"
-                        >
-                          {entity.entity_type}
-                          <span className="ml-1 text-blue-600 dark:text-blue-300">
-                            {(entity.score * 100).toFixed(0)}%
+                      {event.entities_detected.slice(0, 3).map((entity, idx) => {
+                        const entityName = typeof entity === 'string' ? entity : (entity?.entity_type || 'Unknown')
+                        const confidence = typeof entity === 'object' && entity?.score ? (entity.score * 100).toFixed(0) : '0'
+                        
+                        return (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400"
+                          >
+                            {entityName}
+                            <span className="ml-1 text-blue-600 dark:text-blue-300">
+                              {confidence}%
+                            </span>
                           </span>
-                        </span>
-                      ))}
+                        )
+                      })}
                       {event.entities_detected.length > 3 && (
                         <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
                           +{event.entities_detected.length - 3} more

@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY app.py .
 COPY test_app.py .
+COPY test_app_basic.py .
 COPY example_client.py .
 COPY static/ ./static/
 
