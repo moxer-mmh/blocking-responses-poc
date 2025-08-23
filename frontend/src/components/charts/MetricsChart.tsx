@@ -23,25 +23,56 @@ interface MetricsDataPoint {
 const MetricsChart: React.FC = () => {
   const { realtimeMetrics } = useDashboardStore()
 
-  // Generate mock time-series data for demonstration
+  // Generate time-series data based on actual metrics
   const chartData: MetricsDataPoint[] = useMemo(() => {
     const now = Date.now()
     const data: MetricsDataPoint[] = []
     
-    for (let i = 23; i >= 0; i--) {
+    // Use real metrics for the latest data point, and simulate minimal historical trend
+    const currentRequests = realtimeMetrics.total_requests
+    const currentBlocked = realtimeMetrics.blocked_requests
+    const currentBlockRate = realtimeMetrics.block_rate
+    const currentRiskScore = realtimeMetrics.avg_risk_score
+    const currentProcessingTime = realtimeMetrics.performance_metrics.avg_processing_time
+    
+    // Show data points for the last 10 time periods (every 1 minute = 10 minutes total)
+    for (let i = 9; i >= 0; i--) {
       const timestamp = new Date(now - (i * 60000)).toISOString() // Every minute
-      const requests = Math.floor(Math.random() * 50) + 10
-      const blocked = Math.floor(requests * (Math.random() * 0.3))
-      const blockRate = requests > 0 ? (blocked / requests) * 100 : 0
       
-      data.push({
-        timestamp: formatters.time(timestamp),
-        requests,
-        blocked,
-        blockRate,
-        avgRiskScore: Math.random() * 1.5,
-        processingTime: Math.floor(Math.random() * 200) + 50,
-      })
+      if (i === 0) {
+        // Use actual current data for the latest point
+        data.push({
+          timestamp: formatters.time(timestamp),
+          requests: currentRequests,
+          blocked: currentBlocked,
+          blockRate: currentBlockRate,
+          avgRiskScore: currentRiskScore,
+          processingTime: currentProcessingTime,
+        })
+      } else if (i <= 2) {
+        // Recent history with minimal variation (last 2-3 minutes)
+        const requestsVariation = Math.max(0, currentRequests - i)
+        const blockedVariation = Math.max(0, currentBlocked - i)
+        
+        data.push({
+          timestamp: formatters.time(timestamp),
+          requests: requestsVariation,
+          blocked: blockedVariation,
+          blockRate: requestsVariation > 0 ? (blockedVariation / requestsVariation) * 100 : 0,
+          avgRiskScore: Math.max(0, currentRiskScore - (i * 0.1)),
+          processingTime: Math.max(20, currentProcessingTime - (i * 5)),
+        })
+      } else {
+        // Older points with minimal data (historical baseline)
+        data.push({
+          timestamp: formatters.time(timestamp),
+          requests: 0,
+          blocked: 0,
+          blockRate: 0,
+          avgRiskScore: 0,
+          processingTime: 25,
+        })
+      }
     }
     
     return data

@@ -24,6 +24,7 @@ interface DashboardStore extends DashboardState {
   
   // Audit actions
   addAuditEvents: (events: AuditEvent[]) => void
+  setAuditEvents: (events: AuditEvent[]) => void
   clearAuditEvents: () => void
   
   // Utility actions
@@ -126,12 +127,21 @@ export const useDashboardStore = create<DashboardStore>()(
       // Audit actions
       addAuditEvents: (events) =>
         set(
-          (state) => ({
-            auditEvents: [...events, ...state.auditEvents].slice(0, 1000), // Keep last 1000 events
-          }),
+          (state) => {
+            // Deduplicate events by ID to prevent duplicates
+            const existingIds = new Set(state.auditEvents.map(e => e.id))
+            const newEvents = events.filter(e => !existingIds.has(e.id))
+            
+            return {
+              auditEvents: [...newEvents, ...state.auditEvents].slice(0, 1000), // Keep last 1000 events
+            }
+          },
           false,
           'addAuditEvents'
         ),
+      
+      setAuditEvents: (events) =>
+        set({ auditEvents: events.slice(0, 1000) }, false, 'setAuditEvents'),
       
       clearAuditEvents: () =>
         set({ auditEvents: [] }, false, 'clearAuditEvents'),

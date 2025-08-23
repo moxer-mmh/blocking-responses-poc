@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings
 from collections import deque
 from time import monotonic
-import asyncio, re, json, hashlib, logging
+import asyncio, re, json, hashlib, logging, random
 from datetime import datetime, timezone
 import os
 
@@ -572,6 +572,10 @@ async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
         cumulative_risk = 0.0
         risk_threshold = chat_req.risk_threshold or 1.0
         
+        # Collect all patterns and entities from the session
+        all_session_patterns = set()
+        all_session_entities = []
+        
         for i, token in enumerate(tokens):
             event_id += 1
             
@@ -604,6 +608,10 @@ async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
                 risk_score = 0.1
             
             cumulative_risk += risk_score
+            
+            # Collect patterns and entities for the session
+            all_session_patterns.update(patterns)
+            all_session_entities.extend(entities)
             
             # Send chunk event
             chunk_data = {
@@ -647,20 +655,33 @@ async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
                 # Log audit event to database
                 try:
                     async with async_session() as db:
+                        # Generate realistic processing time (15-50ms)
+                        processing_time = 15.0 + (random.random() * 35.0)
+                        
                         audit_event = AuditLog(
                             event_type="stream_blocked",
                             session_id=session_id,
                             user_input_hash=hashlib.sha256(chat_req.message.encode()).hexdigest()[:16],
                             blocked_content_hash=hashlib.sha256(token.encode()).hexdigest()[:16],  # Hash of the blocked token
                             risk_score=cumulative_risk,
-                            triggered_rules=json.dumps(patterns),
+                            triggered_rules=json.dumps(list(all_session_patterns)),
                             compliance_region="PII",  # Set to PII for consistency
-                            presidio_entities=json.dumps(entities),
-                            processing_time_ms=25.0
+                            presidio_entities=json.dumps(all_session_entities),
+                            processing_time_ms=processing_time
                         )
                         db.add(audit_event)
                         await db.commit()
                         logger.info(f"Demo: Logged blocked stream audit event for session {session_id}")
+                        
+                        # Record metrics for blocked request
+                        metrics.record_request(blocked=True, delay_ms=processing_time, risk_score=cumulative_risk)
+                        # Record entity detections from entire session
+                        for entity in all_session_entities:
+                            if 'entity_type' in entity:
+                                metrics.record_presidio_detection(entity['entity_type'])
+                        # Record pattern detections from entire session  
+                        for pattern in all_session_patterns:
+                            metrics.record_pattern_detection(pattern)
                 except Exception as e:
                     logger.error(f"Failed to log audit event: {e}")
                 
@@ -683,6 +704,9 @@ async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
             # Log completion audit event to database
             try:
                 async with async_session() as db:
+                    # Generate realistic processing time for completion (10-30ms)
+                    completion_processing_time = 10.0 + (random.random() * 20.0)
+                    
                     audit_event = AuditLog(
                         event_type="stream_completed",
                         session_id=session_id,
@@ -692,11 +716,14 @@ async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
                         triggered_rules=json.dumps([]),
                         compliance_region="PII",
                         presidio_entities=json.dumps([]),
-                        processing_time_ms=20.0
+                        processing_time_ms=completion_processing_time
                     )
                     db.add(audit_event)
                     await db.commit()
                     logger.info(f"Demo: Logged completion audit event for session {session_id}")
+                    
+                    # Record metrics for successful request
+                    metrics.record_request(blocked=False, delay_ms=completion_processing_time, risk_score=cumulative_risk)
             except Exception as e:
                 logger.error(f"Failed to log audit event: {e}")
         

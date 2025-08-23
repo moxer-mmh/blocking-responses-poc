@@ -27,6 +27,7 @@ const Dashboard: React.FC = () => {
     lastUpdate,
     updateMetrics,
     setActiveView,
+    setAuditEvents,
   } = useDashboardStore()
 
   const isConnected = useConnection()
@@ -118,12 +119,19 @@ const Dashboard: React.FC = () => {
     const fetchMetrics = async () => {
       if (isConnected) {
         try {
+          // Fetch metrics
           const metricsResponse = await apiClient.getMetrics()
           if (metricsResponse.success && metricsResponse.data) {
             updateMetrics(metricsResponse.data)
           }
+          
+          // Fetch recent audit events for dashboard components
+          const auditResponse = await apiClient.getAuditLogs({ limit: 50 })
+          if (auditResponse.success && auditResponse.data) {
+            setAuditEvents(auditResponse.data.events || [])
+          }
         } catch (error) {
-          console.error('Failed to fetch metrics:', error)
+          console.error('Failed to fetch dashboard data:', error)
         }
       }
     }
@@ -134,7 +142,7 @@ const Dashboard: React.FC = () => {
     const interval = setInterval(fetchMetrics, 30000) // Every 30 seconds
     
     return () => clearInterval(interval)
-  }, [isConnected, updateMetrics])
+  }, [isConnected, updateMetrics, setAuditEvents])
 
   const containerVariants = {
     hidden: { opacity: 0 },

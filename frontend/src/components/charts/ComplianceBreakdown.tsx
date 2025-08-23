@@ -125,6 +125,12 @@ const ComplianceBreakdown: React.FC = () => {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="patternGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.9} />
+                    <stop offset="95%" stopColor="#1d4ed8" stopOpacity={0.7} />
+                  </linearGradient>
+                </defs>
                 <XAxis 
                   dataKey="name" 
                   tick={{ fontSize: 11 }}
@@ -144,8 +150,11 @@ const ComplianceBreakdown: React.FC = () => {
                 <Tooltip content={<CustomTooltip />} />
                 <Bar 
                   dataKey="count" 
-                  fill="#3b82f6"
+                  fill="url(#patternGradient)"
                   radius={[4, 4, 0, 0]}
+                  stroke="#2563eb"
+                  strokeWidth={1}
+                  minPointSize={5}
                 />
               </BarChart>
             </ResponsiveContainer>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { useSearchParams } from 'react-router-dom'
 import { 
   Search, 
   Filter, 
@@ -41,12 +42,28 @@ const AuditLogs: React.FC = () => {
     end: ''
   })
   
+  const [searchParams, setSearchParams] = useSearchParams()
   const isConnected = useConnection()
   const { success, error: notifyError, info } = useNotifications()
 
   useEffect(() => {
     loadAuditLogs()
   }, [isConnected])
+
+  // Check for eventId in URL params and auto-open details
+  useEffect(() => {
+    const eventId = searchParams.get('eventId')
+    if (eventId && auditEvents.length > 0) {
+      const targetEvent = auditEvents.find(event => event.id === eventId)
+      if (targetEvent) {
+        setSelectedEvent(targetEvent)
+        setShowDetailsModal(true)
+        // Remove the eventId from URL after opening
+        searchParams.delete('eventId')
+        setSearchParams(searchParams)
+      }
+    }
+  }, [auditEvents, searchParams, setSearchParams])
 
   // Auto-refresh functionality
   useEffect(() => {
@@ -82,19 +99,12 @@ const AuditLogs: React.FC = () => {
           compliance_type: event.compliance_type === 'GENERAL' ? 'PII' : event.compliance_type,
           risk_score: event.risk_score || 0,
           blocked: event.blocked || false,
-          patterns_detected: JSON.parse(event.triggered_rules || '[]'),
-          entities_detected: event.details?.presidio_entities ? 
-            Object.entries(event.details.presidio_entities).map(([type, data]: [string, any]) => ({
-              entity_type: type,
-              score: data.score || 0.5,
-              start: data.start || 0,
-              end: data.end || 0,
-              text: data.text || ''
-            })) : [],
-          decision_reason: event.blocked ? 
+          patterns_detected: event.patterns_detected || [],
+          entities_detected: event.entities_detected || [],
+          decision_reason: event.decision_reason || (event.blocked ? 
             'Content blocked due to compliance violations' : 
-            'Content processed successfully - no violations detected',
-          content_hash: event.snippet_hash,
+            'Content processed successfully - no violations detected'),
+          content_hash: event.content_hash,
           metadata: event.details || {}
         }))
         
@@ -246,19 +256,12 @@ const AuditLogs: React.FC = () => {
           compliance_type: event.compliance_type === 'GENERAL' ? 'PII' : event.compliance_type,
           risk_score: event.risk_score || 0,
           blocked: event.blocked || false,
-          patterns_detected: JSON.parse(event.triggered_rules || '[]'),
-          entities_detected: event.details?.presidio_entities ? 
-            Object.entries(event.details.presidio_entities).map(([type, data]: [string, any]) => ({
-              entity_type: type,
-              score: data.score || 0.5,
-              start: data.start || 0,
-              end: data.end || 0,
-              text: data.text || ''
-            })) : [],
-          decision_reason: event.blocked ? 
+          patterns_detected: event.patterns_detected || [],
+          entities_detected: event.entities_detected || [],
+          decision_reason: event.decision_reason || (event.blocked ? 
             'Content blocked due to compliance violations' : 
-            'Content processed successfully - no violations detected',
-          content_hash: event.snippet_hash,
+            'Content processed successfully - no violations detected'),
+          content_hash: event.content_hash,
           metadata: event.details || {}
         }))
         

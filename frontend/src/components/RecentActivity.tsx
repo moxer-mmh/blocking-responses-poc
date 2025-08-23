@@ -1,5 +1,6 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { 
   Shield, 
   AlertTriangle, 
@@ -16,7 +17,8 @@ import { formatters, truncateText } from '@/utils'
 import { AuditEvent } from '@/types'
 
 const RecentActivity: React.FC = () => {
-  const recentEvents = useRecentAuditEvents(10)
+  const recentEvents = useRecentAuditEvents(5) // Limit to 5 events
+  const navigate = useNavigate()
 
   const getEventIcon = (event: AuditEvent) => {
     if (event.blocked) {
@@ -67,7 +69,7 @@ const RecentActivity: React.FC = () => {
             <Badge variant="secondary">
               {recentEvents.length} events
             </Badge>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/audit')}>
               <Eye className="w-4 h-4 mr-2" />
               View All
             </Button>
@@ -84,6 +86,7 @@ const RecentActivity: React.FC = () => {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
+                onClick={() => navigate(`/audit?eventId=${event.id}`)}
                 className="flex items-start space-x-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer group"
               >
                 <div className="flex-shrink-0 mt-0.5">
