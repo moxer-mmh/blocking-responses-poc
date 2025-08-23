@@ -1,4 +1,4 @@
-# pip install fastapi uvicorn langchain-openai langchain-core presidio-analyzer spacy tiktoken
+# pip install fastapi uvicorn langchain-openai langchain-core presidio-analyzer spacy tiktoken slowapi
 # python -m spacy download en_core_web_lg
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
@@ -14,7 +14,18 @@ import json
 import hashlib
 import logging
 import random
+import secrets  # For cryptographically secure session IDs
 from datetime import datetime, timezone
+import os
+from dotenv import load_dotenv
+
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Database imports
 from sqlalchemy import (
@@ -74,10 +85,10 @@ class Settings(BaseSettings):
     delay_ms: int = 250
 
     # Compliance thresholds
-    risk_threshold: float = 1.0
+    risk_threshold: float = 0.7  # Fixed default to match env file
     presidio_confidence_threshold: float = 0.6
-    judge_threshold: float = 0.8  # Added missing field
-    enable_judge: bool = True  # Added missing field
+    judge_threshold: float = 0.8
+    enable_judge: bool = True
 
     # Safe rewrite settings
     enable_safe_rewrite: bool = True
@@ -101,6 +112,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# -------------------- Rate Limiting Setup --------------------
+limiter = Limiter(key_func=get_remote_address)
 
 # -------------------- Database Setup --------------------
 Base = declarative_base()  # type: ignore
@@ -159,18 +173,18 @@ logger = logging.getLogger("blocking_responses_regulated")
 
 # Pydantic models
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=10000)
-    model: Optional[str] = None
-    system_prompt: Optional[str] = None
-    delay_tokens: Optional[int] = Field(None, ge=5, le=100)
-    delay_ms: Optional[int] = Field(None, ge=50, le=2000)
-    risk_threshold: Optional[float] = Field(None, ge=0.0, le=5.0)
+    message: str = Field(..., min_length=1, max_length=5000)  # Reduced from 10000 for security
+    model: Optional[str] = Field(None, max_length=100)
+    system_prompt: Optional[str] = Field(None, max_length=1000)
+    delay_tokens: Optional[int] = Field(None, ge=5, le=50)  # Reduced max for security
+    delay_ms: Optional[int] = Field(None, ge=50, le=1000)  # Reduced max for performance
+    risk_threshold: Optional[float] = Field(None, ge=0.0, le=2.0)  # Reduced max for safety
     enable_safe_rewrite: Optional[bool] = None
     region: Optional[str] = Field(
-        None, description="Compliance region: US, EU, HIPAA, PCI"
+        None, description="Compliance region: US, EU, HIPAA, PCI", max_length=10
     )
     api_key: Optional[str] = Field(
-        None, description="OpenAI API key (overrides environment variable)"
+        None, description="OpenAI API key (overrides environment variable)", max_length=200
     )
 
 
@@ -201,18 +215,26 @@ app = FastAPI(
     version="1.1.0",
 )
 
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS middleware
+origins = settings.get_cors_origins()
+# Security: Don't allow credentials with wildcard origins
+allow_credentials = "*" not in origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=origins,
+    allow_credentials=allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # -------------------- Compliance Policy Configuration --------------------
 COMPLIANCE_POLICY: Dict[str, Any] = {
-    "threshold": settings.risk_threshold,
+    "threshold": 0.7,  # Will be updated to settings.risk_threshold after initialization
     "weights": {
         # PII (Personally Identifiable Information)
         "email": 0.4,
@@ -408,6 +430,22 @@ class RegulatedPatternDetector:
             timestamp=datetime.utcnow(),
         )
 
+
+# -------------------- Utility Functions --------------------
+def generate_session_id() -> str:
+    """Generate cryptographically secure session ID"""
+    return secrets.token_hex(6)  # 12 character hex string
+
+def sanitize_for_logging(text: str, max_length: int = 50) -> str:
+    """Sanitize text for safe logging without exposing PII"""
+    if not text:
+        return ""
+    # Truncate and mask potential sensitive data
+    truncated = text[:max_length]
+    # Replace potential SSN, credit card patterns with asterisks for logging
+    sanitized = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '***-**-****', truncated)
+    sanitized = re.sub(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b', '****-****-****-****', sanitized)
+    return sanitized
 
 # -------------------- Metrics Tracking --------------------
 class MetricsTracker:
@@ -641,220 +679,6 @@ async def heartbeat_generator(queue: asyncio.Queue, interval: int = 15):
             break
 
 
-async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
-    """Demo mode streaming without OpenAI - simulates realistic compliance screening"""
-
-    async def demo_event_generator() -> AsyncIterator[bytes]:
-        # Demo response that will trigger various compliance alerts
-        demo_text = "I can help you with patient information. Let me look up John Doe's medical record. His SSN is 123-45-6789 and his phone number is (555) 123-4567. He was born on January 15, 1980."
-
-        # Split into tokens for realistic streaming
-        tokens = demo_text.split()
-
-        # Generate session ID
-        session_id = hashlib.sha256(
-            f"{datetime.utcnow()}{chat_req.message}".encode()
-        ).hexdigest()[:12]
-        event_id = 0
-        cumulative_risk = 0.0
-        risk_threshold = chat_req.risk_threshold or 1.0
-
-        # Collect all patterns and entities from the session
-        all_session_patterns = set()
-        all_session_entities = []
-
-        for i, token in enumerate(tokens):
-            event_id += 1
-
-            # Simulate risk scoring
-            risk_score = 0.0
-            entities = []
-            patterns = []
-
-            # Assign risk scores to specific tokens
-            if token.lower() in ["patient", "medical", "record"]:
-                risk_score = 0.7
-                entities = [{"entity_type": "MEDICAL_INFO", "score": 0.85}]
-            elif token in ["John", "Doe"]:
-                risk_score = 0.9
-                entities = [{"entity_type": "PERSON", "score": 0.92}]
-                patterns = ["NAME_PATTERN"]
-            elif "ssn" in token.lower() or "123-45-6789" in token:
-                risk_score = 1.2
-                entities = [{"entity_type": "US_SSN", "score": 0.99}]
-                patterns = ["SSN_PATTERN"]
-            elif "555" in token or "123-4567" in token:
-                risk_score = 0.8
-                entities = [{"entity_type": "PHONE_NUMBER", "score": 0.87}]
-                patterns = ["PHONE_PATTERN"]
-            elif token in ["January", "15,", "1980"]:
-                risk_score = 0.6
-                entities = [{"entity_type": "DATE_TIME", "score": 0.75}]
-                patterns = ["DATE_PATTERN"]
-            else:
-                risk_score = 0.1
-
-            cumulative_risk += risk_score
-
-            # Collect patterns and entities for the session
-            all_session_patterns.update(patterns)
-            all_session_entities.extend(entities)
-
-            # Send chunk event
-            chunk_data = {
-                "type": "chunk",
-                "content": token + (" " if i < len(tokens) - 1 else ""),
-                "risk_score": risk_score,
-                "cumulative_risk": cumulative_risk,
-                "entities": entities,
-                "patterns": patterns,
-                "session_id": session_id,
-            }
-
-            yield sse_event(
-                json.dumps(chunk_data), event="chunk", id=str(event_id)
-            ).encode()
-
-            # Send risk alert if high risk
-            if risk_score >= 0.7:
-                event_id += 1
-                risk_alert = {
-                    "type": "risk_alert",
-                    "content": token,
-                    "risk_score": risk_score,
-                    "entities": entities,
-                    "patterns": patterns,
-                    "reason": f"High-risk token detected: {entities[0]['entity_type'] if entities else 'UNKNOWN'}",
-                }
-                yield sse_event(
-                    json.dumps(risk_alert), event="risk_alert", id=str(event_id)
-                ).encode()
-
-            # Block if threshold exceeded
-            if cumulative_risk >= risk_threshold:
-                event_id += 1
-                block_data = {
-                    "type": "blocked",
-                    "reason": f"Cumulative risk score {cumulative_risk:.2f} exceeded threshold {risk_threshold}",
-                    "risk_score": cumulative_risk,
-                    "session_id": session_id,
-                    "triggered_entities": entities,
-                    "compliance_violation": "HIPAA - PHI disclosure detected",
-                }
-                yield sse_event(
-                    json.dumps(block_data), event="blocked", id=str(event_id)
-                ).encode()
-
-                # Log audit event to database
-                try:
-                    async with async_session() as db:
-                        # Generate realistic processing time (15-50ms)
-                        processing_time = 15.0 + (random.random() * 35.0)
-
-                        audit_event = AuditLog(
-                            event_type="stream_blocked",
-                            session_id=session_id,
-                            user_input_hash=hashlib.sha256(
-                                chat_req.message.encode()
-                            ).hexdigest()[:16],
-                            blocked_content_hash=hashlib.sha256(
-                                token.encode()
-                            ).hexdigest()[:16],  # Hash of the blocked token
-                            risk_score=cumulative_risk,
-                            triggered_rules=json.dumps(list(all_session_patterns)),
-                            compliance_region="PII",  # Set to PII for consistency
-                            presidio_entities=json.dumps(all_session_entities),
-                            processing_time_ms=processing_time,
-                        )
-                        db.add(audit_event)
-                        await db.commit()
-                        logger.info(
-                            f"Demo: Logged blocked stream audit event for session {session_id}"
-                        )
-
-                        # Record metrics for blocked request
-                        metrics.record_request(
-                            blocked=True,
-                            delay_ms=processing_time,
-                            risk_score=cumulative_risk,
-                        )
-                        # Record entity detections from entire session
-                        for entity in all_session_entities:
-                            if "entity_type" in entity:
-                                metrics.record_presidio_detection(entity["entity_type"])
-                        # Record pattern detections from entire session
-                        for pattern in all_session_patterns:
-                            metrics.record_pattern_detection(pattern)
-                except Exception as e:
-                    logger.error(f"Failed to log audit event: {e}")
-
-                break
-
-            # Add delay between tokens
-            await asyncio.sleep(0.15)
-
-        # If not blocked, send completion
-        if cumulative_risk < risk_threshold:
-            event_id += 1
-            completion_data = {
-                "type": "completed",
-                "session_id": session_id,
-                "total_risk": cumulative_risk,
-                "status": "success",
-            }
-            yield sse_event(
-                json.dumps(completion_data), event="completed", id=str(event_id)
-            ).encode()
-
-            # Log completion audit event to database
-            try:
-                async with async_session() as db:
-                    # Generate realistic processing time for completion (10-30ms)
-                    completion_processing_time = 10.0 + (random.random() * 20.0)
-
-                    audit_event = AuditLog(
-                        event_type="stream_completed",
-                        session_id=session_id,
-                        user_input_hash=hashlib.sha256(
-                            chat_req.message.encode()
-                        ).hexdigest()[:16],
-                        blocked_content_hash=None,  # No content blocked
-                        risk_score=cumulative_risk,
-                        triggered_rules=json.dumps([]),
-                        compliance_region="PII",
-                        presidio_entities=json.dumps([]),
-                        processing_time_ms=completion_processing_time,
-                    )
-                    db.add(audit_event)
-                    await db.commit()
-                    logger.info(
-                        f"Demo: Logged completion audit event for session {session_id}"
-                    )
-
-                    # Record metrics for successful request
-                    metrics.record_request(
-                        blocked=False,
-                        delay_ms=completion_processing_time,
-                        risk_score=cumulative_risk,
-                    )
-            except Exception as e:
-                logger.error(f"Failed to log audit event: {e}")
-
-        # Final done event
-        yield sse_event("[DONE]", event="done").encode()
-
-    return StreamingResponse(
-        demo_event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "X-Accel-Buffering": "no",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-    )
-
 
 # -------------------- LLM Streaming --------------------
 async def upstream_stream(
@@ -1047,12 +871,31 @@ async def get_audit_logs(
                     else:
                         logger.warning(f"Unknown entity format: {entity}")
 
+                # Determine compliance type from patterns
+                triggered_rules_list = json.loads(str(log.triggered_rules)) if log.triggered_rules else []
+                compliance_type = "PII"  # default
+                
+                # Check patterns to determine compliance type
+                for rule in triggered_rules_list:
+                    rule_lower = rule.lower()
+                    if "credit" in rule_lower or "card" in rule_lower or "pci" in rule_lower:
+                        compliance_type = "PCI_DSS"
+                        break
+                    elif "medical" in rule_lower or "phi" in rule_lower or "patient" in rule_lower or "diagnosis" in rule_lower:
+                        compliance_type = "HIPAA"
+                        break
+                    elif "email" in rule_lower and log.compliance_region == "GDPR":
+                        compliance_type = "GDPR"
+                        break
+                    elif "ssn" in rule_lower or "phone" in rule_lower or "address" in rule_lower:
+                        compliance_type = "PII"
+
                 return_data = {
                     "id": log.id,
                     "timestamp": log.timestamp.replace(tzinfo=timezone.utc).isoformat(),
                     "event_type": log.event_type,
                     "session_id": log.session_id or f"session_{log.id}",
-                    "compliance_type": log.compliance_region or "PII",
+                    "compliance_type": compliance_type,
                     "risk_score": log.risk_score,
                     "blocked": log.blocked_content_hash is not None,
                     "decision_reason": f"Risk score: {log.risk_score:.2f} - {'Content blocked due to compliance violations' if log.blocked_content_hash else 'Content processed successfully - no violations detected'}",
@@ -1064,7 +907,7 @@ async def get_audit_logs(
                     "processing_time_ms": log.processing_time_ms,
                 }
                 logger.info(
-                    f"DEBUG: Final return data entities: {return_data['entities_detected']}"
+                    f"Final return data entities: {return_data['entities_detected']}"
                 )
                 processed_logs.append(return_data)
 
@@ -1076,20 +919,74 @@ async def get_audit_logs(
 
 # -------------------- Main SSE Endpoint --------------------
 @app.post("/chat/stream")
+@limiter.limit("10/minute")  # Rate limit: 10 requests per minute per IP
 async def chat_stream_sse(request: Request, chat_req: ChatRequest):
     """SSE endpoint with regulated industry compliance"""
 
     # Use API key from request if provided, otherwise fall back to environment variable
     api_key = chat_req.api_key or settings.openai_api_key
-    use_demo_mode = not api_key or api_key == "your_openai_api_key_here"
-
-    if use_demo_mode:
-        return await chat_stream_demo_mode(request, chat_req)
+    
+    if not api_key:
+        raise HTTPException(status_code=400, detail="OpenAI API key is required")
 
     # Configuration
     delay_tokens = chat_req.delay_tokens or settings.delay_tokens
     delay_ms = chat_req.delay_ms or settings.delay_ms
     risk_threshold = chat_req.risk_threshold or settings.risk_threshold
+
+    # Check user input for compliance violations BEFORE streaming
+    user_compliance_result = pattern_detector.assess_compliance_risk(
+        chat_req.message, chat_req.region
+    )
+    user_presidio_score, user_presidio_entities = presidio_detector.analyze_text(
+        chat_req.message
+    )
+    user_total_score = user_compliance_result.score + user_presidio_score
+    
+    # If user input violates compliance, block immediately
+    if user_total_score >= risk_threshold:
+        logger.warning(f"User input blocked - Score: {user_total_score:.2f}, Message: {sanitize_for_logging(chat_req.message)}...")
+        
+        # Record metrics for blocked request
+        metrics.record_request(
+            blocked=True, delay_ms=0, risk_score=user_total_score
+        )
+        
+        # Record pattern detections for metrics
+        for rule in user_compliance_result.triggered_rules:
+            pattern_name = rule.split(":")[0].strip()
+            metrics.record_pattern_detection(pattern_name)
+        
+        # Record Presidio detections for metrics
+        for entity in user_presidio_entities:
+            metrics.record_presidio_detection(entity.get("entity_type", "unknown"))
+        
+        # Log audit event for blocked user input
+        session_id = generate_session_id()
+        user_input_hash = hashlib.sha256(chat_req.message.encode()).hexdigest()[:16]
+        
+        audit_event = AuditEvent(
+            event_type="user_input_blocked",
+            user_input_hash=user_input_hash,
+            blocked_content_hash=user_input_hash,
+            risk_score=user_total_score,
+            triggered_rules=user_compliance_result.triggered_rules + [f"presidio: score {user_presidio_score:.2f}"] if user_presidio_score > 0 else user_compliance_result.triggered_rules,
+            timestamp=datetime.utcnow(),
+            session_id=session_id,
+        )
+        
+        await log_audit_event(
+            audit_event,
+            processing_time_ms=0,
+            presidio_entities=user_presidio_entities,
+        )
+        
+        # Return blocking response
+        error_message = f"Request blocked due to compliance policy violation (risk score: {user_total_score:.2f})"
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'blocked', 'content': error_message, 'risk_score': user_total_score})}\n\n".encode()]),
+            media_type="text/event-stream"
+        )
 
     async def event_generator() -> AsyncIterator[bytes]:
         queue: asyncio.Queue[str] = asyncio.Queue(maxsize=200)
@@ -1105,17 +1002,23 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
         all_triggered_rules = []
 
         # Generate session ID for audit tracking
-        session_id = hashlib.sha256(
-            f"{datetime.utcnow()}{chat_req.message}".encode()
-        ).hexdigest()[:12]
+        session_id = generate_session_id()
         user_input_hash = hashlib.sha256(chat_req.message.encode()).hexdigest()[:16]
 
-        async def emit_event(data: str, event: str = "chunk", event_id_val: Optional[int] = None):
+        async def emit_event(data: str, event: str = "chunk", event_id_val: Optional[int] = None, risk_score: Optional[float] = None):
             nonlocal event_id
             if event_id_val is None:
                 event_id += 1
                 event_id_val = event_id
-            await queue.put(sse_event(data, event=event, id=str(event_id_val)))
+            
+            # Format data as JSON for frontend consumption
+            event_data = {
+                "type": event,
+                "content": data,
+                "timestamp": datetime.utcnow().isoformat(),
+                "risk_score": risk_score
+            }
+            await queue.put(sse_event(json.dumps(event_data), event=event, id=str(event_id_val)))
 
         async def flush_tokens(force: bool = False):
             """Flush tokens from buffer while maintaining look-ahead window"""
@@ -1148,7 +1051,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
             for _ in range(pieces_to_emit):
                 if token_buffer:
                     piece = token_buffer.popleft()
-                    await emit_event(piece)
+                    await emit_event(piece, event="chunk")
 
             last_flush = monotonic()
 
@@ -1184,6 +1087,23 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                     max_risk_score = max(max_risk_score, total_score)
                     all_triggered_rules.extend(compliance_result.triggered_rules)
 
+                    # Record pattern detections when they occur
+                    for rule in compliance_result.triggered_rules:
+                        pattern_name = rule.split(":")[0].strip()
+                        metrics.record_pattern_detection(pattern_name)
+                    
+                    # Record Presidio detections when they occur
+                    for entity in presidio_entities:
+                        metrics.record_presidio_detection(entity.get("entity_type", "unknown"))
+
+                    # Emit risk alert for high scores (but not blocking level)
+                    if total_score >= 0.3 and total_score < settings.risk_threshold:
+                        await emit_event(
+                            f"Risk detected: {compliance_result.triggered_rules}",
+                            event="risk_alert",
+                            risk_score=total_score
+                        )
+
                     if presidio_entities:
                         for entity in presidio_entities:
                             all_triggered_rules.append(
@@ -1217,22 +1137,27 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                             presidio_entities=presidio_entities,
                         )
 
+                        # Record metrics for blocked content
+                        metrics.record_request(
+                            blocked=True, delay_ms=elapsed_ms, risk_score=total_score
+                        )
+
                         logger.warning(
                             f"Content blocked - Score: {total_score:.2f}, Rules: {all_triggered_rules}"
                         )
 
                         # Emit compliance notice
                         await emit_event(
-                            "Content blocked for compliance", event="notice"
+                            "Content blocked for compliance", event="blocked", risk_score=total_score
                         )
 
                         # Stream safe rewrite
                         async for safe_piece in safe_rewrite_stream(
                             chat_req.message, all_triggered_rules, api_key
                         ):
-                            await emit_event(safe_piece)
+                            await emit_event(safe_piece, event="chunk")
 
-                        await emit_event("[DONE]", event="done")
+                        await emit_event("Stream completed", event="completed")
                         return
 
                     # Check if we should flush based on time or buffer size
@@ -1252,7 +1177,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                 # End of stream - flush remaining tokens if not vetoed
                 if not vetoed:
                     await flush_tokens(force=True)
-                    await emit_event("[DONE]", event="done")
+                    await emit_event("Stream completed successfully", event="completed", risk_score=max_risk_score)
 
                     # Log successful completion
                     audit_event = AuditEvent(
@@ -1268,9 +1193,14 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                         audit_event, processing_time_ms=elapsed_ms, presidio_entities=[]
                     )
 
+                    # Record metrics for successful completion
+                    metrics.record_request(
+                        blocked=False, delay_ms=elapsed_ms, risk_score=max_risk_score
+                    )
+
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
-                await emit_event(f"[ERROR: {str(e)}]", event="error")
+                await emit_event(f"Error: {str(e)}", event="error")
 
         # Start the streaming task
         stream_task = asyncio.create_task(compliance_check_and_stream())
@@ -1978,6 +1908,10 @@ async def generate_demo_audit_data():
 async def startup_event():
     """Initialize database on startup"""
     try:
+        # Update compliance policy with actual settings
+        COMPLIANCE_POLICY["threshold"] = settings.risk_threshold
+        logger.info(f"Compliance threshold set to: {settings.risk_threshold}")
+        
         await init_database()
         logger.info("Database initialized successfully")
     except Exception as e:

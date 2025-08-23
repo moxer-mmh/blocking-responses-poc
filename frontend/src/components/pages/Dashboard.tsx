@@ -44,6 +44,15 @@ const Dashboard: React.FC = () => {
       // Clear and start fresh output
       setTestOutput('🚀 Starting full test suite execution...\n')
       
+      // First test simple compliance assessment to generate real data
+      const testMessage = "Test SSN: 123-45-6789 for compliance blocking"
+      appendTestOutput(`📝 Testing compliance with message: "${testMessage}"\n`)
+      
+      const assessmentResponse = await apiClient.assessRisk(testMessage)
+      if (assessmentResponse.success) {
+        appendTestOutput(`⚡ Risk assessment complete: Score ${assessmentResponse.data?.score}, Blocked: ${assessmentResponse.data?.blocked}\n`)
+      }
+      
       const response = await apiClient.runTestSuite(['basic', 'patterns', 'presidio', 'streaming'])
       if (response.success && response.data) {
         const data = response.data
@@ -139,6 +148,18 @@ const Dashboard: React.FC = () => {
           const metricsResponse = await apiClient.getMetrics()
           if (metricsResponse.success && metricsResponse.data) {
             updateMetrics(metricsResponse.data)
+            
+            // Add historical metric point for charting
+            const historicalPoint = {
+              timestamp: new Date().toISOString(),
+              total_requests: metricsResponse.data.total_requests,
+              blocked_requests: metricsResponse.data.blocked_requests,
+              block_rate: metricsResponse.data.block_rate,
+              avg_risk_score: metricsResponse.data.avg_risk_score,
+              avg_processing_time: metricsResponse.data.performance_metrics.avg_processing_time,
+              requests_per_second: metricsResponse.data.performance_metrics.requests_per_second,
+            }
+            useDashboardStore.getState().addHistoricalMetric(historicalPoint)
           }
           
           // Fetch recent audit events for dashboard components
@@ -154,8 +175,8 @@ const Dashboard: React.FC = () => {
 
     fetchMetrics()
     
-    // Set up periodic metrics refresh
-    const interval = setInterval(fetchMetrics, 30000) // Every 30 seconds
+    // Set up more frequent metrics refresh for live updates (every 5 seconds)
+    const interval = setInterval(fetchMetrics, 5000) // Every 5 seconds
     
     return () => clearInterval(interval)
   }, [isConnected, updateMetrics, setAuditEvents])

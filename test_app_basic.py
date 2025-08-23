@@ -110,15 +110,13 @@ class TestStreamingEndpoint:
     """Test streaming functionality"""
 
     def test_chat_stream_no_api_key(self, client):
-        """Test that streaming works in demo mode when no API key is provided"""
+        """Test that streaming fails when no API key is provided"""
         with patch("app.settings.openai_api_key", ""):
             request_data = {"message": "Hello"}
             response = client.post("/chat/stream", json=request_data)
-            # Should succeed in demo mode, not fail
-            assert response.status_code == 200
-            # Should use demo mode streaming
-            response_text = response.text
-            assert "event: chunk" in response_text or "I can help" in response_text
+            # Should fail with 400 when no API key is provided
+            assert response.status_code == 400
+            assert "OpenAI API key is required" in response.json()["detail"]
 
     def test_chat_stream_validation(self, client):
         # Test empty message

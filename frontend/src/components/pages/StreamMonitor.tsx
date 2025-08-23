@@ -34,9 +34,26 @@ const StreamMonitor: React.FC = () => {
   const [currentResponse, setCurrentResponse] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [riskScores, setRiskScores] = useState<number[]>([])
+  const [riskThreshold, setRiskThreshold] = useState(0.7) // Default value
   const evtSourceRef = useRef<EventSource | null>(null)
   const isConnected = useConnection()
   const { success, error, warning, info } = useNotifications()
+
+  // Fetch config on component mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/config')
+        if (response.ok) {
+          const config = await response.json()
+          setRiskThreshold(config.risk_threshold)
+        }
+      } catch (err) {
+        console.error('Failed to fetch config:', err)
+      }
+    }
+    fetchConfig()
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -59,8 +76,8 @@ const StreamMonitor: React.FC = () => {
     setRiskScores([])
     
     try {
-      // Get API key from localStorage
-      const apiKey = localStorage.getItem('openai_api_key')
+      // Note: In production, API key should be handled server-side
+      // For demo purposes only - API key should not be client-side
       
       const response = await fetch('http://localhost:8000/chat/stream', {
         method: 'POST',
@@ -71,8 +88,8 @@ const StreamMonitor: React.FC = () => {
           message,
           delay_tokens: 5,
           delay_ms: 100,
-          risk_threshold: 1.0,
-          ...(apiKey && { api_key: apiKey })
+          risk_threshold: riskThreshold,
+          // Note: API key removed for security - handle server-side
         })
       })
 
@@ -513,7 +530,7 @@ const StreamMonitor: React.FC = () => {
                     <div className="relative h-full">
                       {/* Risk threshold line */}
                       <div className="absolute inset-x-4 top-4 border-t-2 border-red-300 border-dashed"></div>
-                      <span className="absolute right-2 top-2 text-xs text-red-500">Risk Threshold (1.0)</span>
+                      <span className="absolute right-2 top-2 text-xs text-red-500">Risk Threshold ({riskThreshold})</span>
                       
                       {/* Risk score line */}
                       <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${Math.max(riskScores.length - 1, 1)} 2`}>
@@ -530,7 +547,7 @@ const StreamMonitor: React.FC = () => {
                             cx={index}
                             cy={2 - Math.min(score, 2)}
                             r="0.03"
-                            className={score >= 1.0 ? "fill-red-500" : score >= 0.7 ? "fill-orange-500" : "fill-blue-500"}
+                            className={score >= riskThreshold ? "fill-red-500" : score >= 0.7 ? "fill-orange-500" : "fill-blue-500"}
                           />
                         ))}
                       </svg>

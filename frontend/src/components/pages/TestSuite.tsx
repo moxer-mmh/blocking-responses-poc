@@ -132,7 +132,7 @@ const TestSuite: React.FC = () => {
     if (!isConnected) return
     
     setIsRunning(true)
-    setTestOutput('🚀 Starting test suite execution...\n')
+    setTestOutput('🚀 Starting full test suite execution...\n')
     
     try {
       const response = await apiClient.runTestSuite(['basic', 'patterns', 'presidio', 'streaming'])
@@ -142,7 +142,29 @@ const TestSuite: React.FC = () => {
         appendTestOutput(`📊 Status: ${data.status}\n`)
         
         if (data.output) {
-          appendTestOutput(`\n📝 Test Output:\n${data.output}\n`)
+          appendTestOutput(`\n📝 Test Results:\n${data.output}\n`)
+        }
+        
+        // Update test suites with results
+        if (data.summary) {
+          appendTestOutput(`\n📊 Summary: ${data.summary.passed}/${data.summary.total} tests passed\n`)
+          
+          // Update local test suites status based on results
+          const summary = data.summary
+          setTestSuites(prevSuites => 
+            prevSuites.map(suite => ({
+              ...suite,
+              status: 'completed',
+              passed: Math.floor(summary.passed / prevSuites.length), // Distribute results
+              failed: Math.floor(summary.failed / prevSuites.length),
+              total: Math.floor(summary.total / prevSuites.length)
+            }))
+          )
+          
+          success(
+            'Tests Completed!',
+            `Results: ${summary.passed}/${summary.total} tests passed`
+          )
         }
         
         // Reload test suites to update status
@@ -168,16 +190,46 @@ const TestSuite: React.FC = () => {
       if (response.success && response.data) {
         const data = response.data
         appendTestOutput(`✅ ${suiteId} completed: ${data.status}\n`)
+        
         if (data.output) {
-          appendTestOutput(data.output + '\n')
+          appendTestOutput(`📝 ${suiteId} output:\n${data.output}\n`)
         }
+        
+        // Update specific suite with results
+        if (data.summary) {
+          appendTestOutput(`📊 ${suiteId} summary: ${data.summary.passed}/${data.summary.total} tests passed\n`)
+          
+          const summary = data.summary
+          setTestSuites(prevSuites =>
+            prevSuites.map(suite =>
+              suite.id === suiteId
+                ? {
+                    ...suite,
+                    status: 'completed',
+                    passed: summary.passed,
+                    failed: summary.failed,
+                    total: summary.total
+                  }
+                : suite
+            )
+          )
+          
+          success(
+            `${suiteId} Completed!`,
+            `${summary.passed}/${summary.total} tests passed`
+          )
+        }
+        
         // Reload test suites to update status
         await loadTestSuites()
       } else {
         appendTestOutput(`❌ Error running ${suiteId}: ${response.error}\n`)
+        error(`${suiteId} Failed`, response.error || 'Unknown error')
       }
-    } catch (error) {
-      appendTestOutput(`💥 Exception running ${suiteId}: ${error}\n`)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      appendTestOutput(`💥 Exception running ${suiteId}: ${errorMsg}\n`)
+      error(`${suiteId} Exception`, errorMsg)
     } finally {
       setRunningTests(prev => prev.filter(id => id !== suiteId))
     }
