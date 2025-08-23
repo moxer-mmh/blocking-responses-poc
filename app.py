@@ -8,26 +8,27 @@ from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings
 from collections import deque
 from time import monotonic
-import asyncio, re, json, hashlib, logging, random
+import asyncio
+import re
+import json
+import hashlib
+import logging
+import random
 from datetime import datetime, timezone
-import os
 
 # Database imports
 from sqlalchemy import (
-    create_engine,
     Column,
     Integer,
     String,
     Float,
     DateTime,
     Text,
-    Boolean,
     select,
+    desc,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-import aiosqlite
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -39,7 +40,6 @@ try:
         AnalyzerEngine,
         PatternRecognizer,
         Pattern,
-        RecognizerResult,
     )
     from presidio_analyzer.nlp_engine import SpacyNlpEngine
 
@@ -382,7 +382,7 @@ class RegulatedPatternDetector:
                     if self.luhn_check(match.group(0)):
                         score += weights.get("credit_card", 1.5)
                         triggered_rules.append(
-                            f"credit_card: Valid credit card number detected"
+                            "credit_card: Valid credit card number detected"
                         )
                         break
             elif pattern.search(text):
@@ -575,7 +575,7 @@ class PresidioDetector:
                             "start": result.start,
                             "end": result.end,
                             "score": result.score,
-                            "text": text[result.start : result.end],
+                            "text": text[result.start: result.end],
                         }
                     )
 
@@ -1018,8 +1018,6 @@ async def get_audit_logs(
     """Retrieve audit logs from database"""
     try:
         async with async_session() as session:
-            from sqlalchemy import select, desc
-
             query = select(AuditLog).order_by(desc(AuditLog.timestamp)).limit(limit)
             if event_type:
                 query = query.where(AuditLog.event_type == event_type)
@@ -1099,6 +1097,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
 
         vetoed = False
         last_flush = monotonic()
+        start_time = monotonic()  # Track processing start time
         token_buffer = deque()
         window_text = ""
         event_id = 0
@@ -1154,7 +1153,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
             last_flush = monotonic()
 
         async def compliance_check_and_stream():
-            nonlocal window_text, vetoed, max_risk_score, all_triggered_rules
+            nonlocal window_text, vetoed, max_risk_score
 
             try:
                 async for piece in upstream_stream(
@@ -1208,6 +1207,10 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                             timestamp=datetime.utcnow(),
                             session_id=session_id,
                         )
+
+                        # Calculate elapsed time
+                        elapsed_ms = (monotonic() - start_time) * 1000
+
                         await log_audit_event(
                             audit_event,
                             processing_time_ms=elapsed_ms,
@@ -1601,7 +1604,6 @@ async def get_test_suites():
 async def run_test_suite(request: dict):
     """Run specific test suites"""
     import subprocess
-    import asyncio
 
     suites = request.get("suites", [])
 
@@ -1667,15 +1669,7 @@ async def run_test_suite(request: dict):
 
         # Parse individual test class results from the detailed output
         # Count tests by class name patterns
-        basic_passed = test_output.count("TestBasicFunctionality") + test_output.count(
-            "TestRiskAssessment"
-        )
-        basic_failed = (
-            test_output.count("TestBasicFunctionality")
-            - test_output.count("TestBasicFunctionality")
-            + test_output.count("TestRiskAssessment")
-            - test_output.count("TestRiskAssessment")
-        )
+        # Note: These counts are approximate based on test output parsing
 
         # Better approach: Parse the actual test results by looking for test class patterns
         import re
@@ -1971,14 +1965,6 @@ async def generate_demo_audit_data():
         return {"success": False, "error": str(e)}
 
 
-# Enhanced Chat Stream Endpoint
-@app.get("/chat/stream")
-async def chat_stream_get(q: str):
-    """GET endpoint for chat streaming (for testing)"""
-    # Redirect to POST with the query
-    return await assess_compliance_risk(q)
-
-
 @app.on_event("startup")
 # Database initialization
 @app.on_event("startup")
@@ -2010,4 +1996,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
-
