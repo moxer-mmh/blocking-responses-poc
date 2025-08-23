@@ -553,19 +553,17 @@ class PresidioDetector:
     def _initialize_presidio(self):
         """Initialize Presidio with custom recognizers for regulated industries"""
         try:
-            # Try to use spaCy model if available
-            nlp_config = {
-                "nlp_engine_name": "spacy",
-                "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}],
-            }
-            nlp_engine = SpacyNlpEngine(nlp_config)
-            self.analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
-        except Exception:
-            # Fallback to basic configuration
+            # Use basic configuration - it should work without spaCy models
             self.analyzer = AnalyzerEngine()
+            logger.info("Presidio initialized with basic configuration")
+        except Exception as e:
+            logger.error(f"Failed to initialize Presidio: {e}")
+            self.analyzer = None
 
-        # Add custom recognizers for regulated industries
-        self._add_custom_recognizers()
+        # Add custom recognizers for regulated industries if analyzer is available
+        if self.analyzer:
+            self._add_custom_recognizers()
+            logger.info("Custom recognizers added to Presidio")
 
     def _add_custom_recognizers(self):
         """Add custom pattern recognizers for specific regulated content"""
@@ -875,20 +873,29 @@ async def get_audit_logs(
                 triggered_rules_list = json.loads(str(log.triggered_rules)) if log.triggered_rules else []
                 compliance_type = "PII"  # default
                 
-                # Check patterns to determine compliance type
+                # Check patterns to determine compliance type - prioritize medical/financial over general PII
+                has_phi = False
+                has_financial = False
+                
                 for rule in triggered_rules_list:
                     rule_lower = rule.lower()
                     if "credit" in rule_lower or "card" in rule_lower or "pci" in rule_lower:
-                        compliance_type = "PCI_DSS"
-                        break
+                        has_financial = True
                     elif "medical" in rule_lower or "phi" in rule_lower or "patient" in rule_lower or "diagnosis" in rule_lower:
-                        compliance_type = "HIPAA"
-                        break
+                        has_phi = True
+                    elif "presidio" in rule_lower and ("date" in rule_lower or "time" in rule_lower):
+                        # DATE_TIME in medical context could be HIPAA
+                        if log.risk_score > 0.7:  # Higher risk suggests medical context
+                            has_phi = True
                     elif "email" in rule_lower and log.compliance_region == "GDPR":
                         compliance_type = "GDPR"
-                        break
-                    elif "ssn" in rule_lower or "phone" in rule_lower or "address" in rule_lower:
-                        compliance_type = "PII"
+                
+                # Set compliance type based on detected patterns
+                if has_financial:
+                    compliance_type = "PCI_DSS"
+                elif has_phi:
+                    compliance_type = "HIPAA"
+                # else stays as "PII" default
 
                 return_data = {
                     "id": log.id,

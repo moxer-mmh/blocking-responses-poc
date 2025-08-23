@@ -91,12 +91,12 @@ const AuditLogs: React.FC = () => {
       
       if (response.success && response.data) {
         // Map the backend audit log format to frontend AuditEvent format
-        const mappedEvents: AuditEvent[] = (response.data.events || []).map((event: any) => ({
+        const mappedEvents: AuditEvent[] = (response.data.logs || []).map((event: any) => ({
           id: event.id.toString(),
           timestamp: event.timestamp,
           event_type: event.event_type || 'UNKNOWN',
           session_id: event.session_id || '',
-          compliance_type: event.compliance_type === 'GENERAL' ? 'PII' : event.compliance_type,
+          compliance_type: event.compliance_type || 'PII',
           risk_score: event.risk_score || 0,
           blocked: event.blocked || false,
           patterns_detected: event.patterns_detected || [],
@@ -248,12 +248,12 @@ const AuditLogs: React.FC = () => {
       })
       
       if (response.success && response.data) {
-        const newEvents: AuditEvent[] = (response.data.events || []).map((event: any) => ({
+        const newEvents: AuditEvent[] = (response.data.logs || []).map((event: any) => ({
           id: event.id.toString(),
           timestamp: event.timestamp,
           event_type: event.event_type || 'UNKNOWN',
           session_id: event.session_id || '',
-          compliance_type: event.compliance_type === 'GENERAL' ? 'PII' : event.compliance_type,
+          compliance_type: event.compliance_type || 'PII',
           risk_score: event.risk_score || 0,
           blocked: event.blocked || false,
           patterns_detected: event.patterns_detected || [],
@@ -266,7 +266,7 @@ const AuditLogs: React.FC = () => {
         }))
         
         setAuditEvents(prev => [...prev, ...newEvents])
-        setHasMore(response.data.has_more || false)
+        setHasMore((response.data.logs?.length || 0) >= 50) // More available if we got a full page
         
         if (newEvents.length > 0) {
           success('Loaded More Events', `Loaded ${newEvents.length} additional audit events`)

@@ -163,10 +163,10 @@ class ApiClient {
     })
     
     return this.request<{
-      events: AuditEvent[]
-      total: number
-      has_more: boolean
-    }>(`/compliance/audit-logs?${params}`)
+      logs: AuditEvent[]
+      count: number
+      total_available: number
+    }>(`/audit-logs?${params}`)
   }
 
   // Streaming endpoints

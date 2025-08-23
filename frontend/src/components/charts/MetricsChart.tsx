@@ -52,13 +52,13 @@ const MetricsChart: React.FC = () => {
       return []
     }
 
-    // Group audit logs by time intervals (5-minute windows)
+    // Group audit logs by time intervals (1-minute windows)
     const timeWindows = new Map<string, { requests: number; blocked: number; totalProcessingTime: number }>()
     
     auditLogs.forEach((log) => {
       const logTime = new Date(log.timestamp)
-      // Round to 5-minute intervals
-      const roundedMinutes = Math.floor(logTime.getMinutes() / 5) * 5
+      // Round to 1-minute intervals
+      const roundedMinutes = Math.floor(logTime.getMinutes() / 1) * 1
       const windowTime = new Date(logTime)
       windowTime.setMinutes(roundedMinutes, 0, 0) // Set seconds and milliseconds to 0
       
@@ -97,7 +97,7 @@ const MetricsChart: React.FC = () => {
         }
       })
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-      .slice(-20) // Show last 20 time windows
+      .slice(-15) // Show last 15 time windows (15 minutes of data)
 
     return chartPoints
   }, [auditLogs])

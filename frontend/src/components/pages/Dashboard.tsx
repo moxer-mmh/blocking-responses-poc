@@ -430,28 +430,35 @@ const Dashboard: React.FC = () => {
                   Presidio Detections ({totalPresidioDetections})
                 </h4>
                 <div className="space-y-3">
-                  {Object.entries(realtimeMetrics.presidio_detections)
-                    .sort(([,a], [,b]) => b - a)
-                    .slice(0, 5)
-                    .map(([entity, count]) => (
-                      <div key={entity} className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {entity.replace(/_/g, ' ')}
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm font-medium">{count}</span>
-                          <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div
-                              className="bg-orange-500 h-2 rounded-full"
-                              style={{
-                                width: `${totalPresidioDetections > 0 ? 
-                                  (count / totalPresidioDetections) * 100 : 0}%`
-                              }}
-                            />
+                  {totalPresidioDetections > 0 ? (
+                    Object.entries(realtimeMetrics.presidio_detections)
+                      .sort(([,a], [,b]) => b - a)
+                      .slice(0, 5)
+                      .map(([entity, count]) => (
+                        <div key={entity} className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {entity.replace(/_/g, ' ')}
+                          </span>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium">{count}</span>
+                            <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div
+                                className="bg-orange-500 h-2 rounded-full"
+                                style={{
+                                  width: `${totalPresidioDetections > 0 ? 
+                                    (count / totalPresidioDetections) * 100 : 0}%`
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                  ) : (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                      Custom pattern detection system active.<br/>
+                      Advanced Presidio ML detection available in enterprise edition.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
