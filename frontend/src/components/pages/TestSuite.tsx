@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useNotifications } from '@/components/ui/Notifications'
 import { useConnection } from '@/utils/useConnection'
+import { useDashboardStore } from '@/stores/dashboard'
 import { apiClient } from '@/utils/api'
 
 // Status badge component
@@ -40,6 +41,7 @@ const StatusBadge: React.FC<{ status: string; animate?: boolean }> = ({ status, 
 const TestSuite: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false)
   const { success, error } = useNotifications()
+  const { testOutput, setTestOutput, appendTestOutput, clearTestOutput } = useDashboardStore()
   const [testSuites, setTestSuites] = useState<any[]>([
     {
       id: 'basic',
@@ -78,7 +80,6 @@ const TestSuite: React.FC = () => {
       failed: 0,
     }
   ])
-  const [testOutput, setTestOutput] = useState<string>('')
   const [runningTests, setRunningTests] = useState<string[]>([])
   const [pollingInterval, setPollingInterval] = useState<number | null>(null)
   const isConnected = useConnection()
@@ -137,20 +138,20 @@ const TestSuite: React.FC = () => {
       const response = await apiClient.runTestSuite(['basic', 'patterns', 'presidio', 'streaming'])
       if (response.success && response.data) {
         const data = response.data
-        setTestOutput(prev => prev + `✅ Test session started: ${data.session_id}\n`)
-        setTestOutput(prev => prev + `📊 Status: ${data.status}\n`)
+        appendTestOutput(`✅ Test session started: ${data.session_id}\n`)
+        appendTestOutput(`📊 Status: ${data.status}\n`)
         
         if (data.output) {
-          setTestOutput(prev => prev + `\n📝 Test Output:\n${data.output}\n`)
+          appendTestOutput(`\n📝 Test Output:\n${data.output}\n`)
         }
         
         // Reload test suites to update status
         await loadTestSuites()
       } else {
-        setTestOutput(prev => prev + `❌ Error: ${response.error}\n`)
+        appendTestOutput(`❌ Error: ${response.error}\n`)
       }
     } catch (error) {
-      setTestOutput(prev => prev + `💥 Exception: ${error}\n`)
+      appendTestOutput(`💥 Exception: ${error}\n`)
     } finally {
       setIsRunning(false)
     }
@@ -160,23 +161,23 @@ const TestSuite: React.FC = () => {
     if (!isConnected) return
     
     setRunningTests(prev => [...prev, suiteId])
-    setTestOutput(`🔄 Running ${suiteId} suite...\n`) // Clear and start fresh
+    appendTestOutput(`🔄 Running ${suiteId} suite...\n`) // Append instead of clearing
     
     try {
       const response = await apiClient.runTestSuite([suiteId])
       if (response.success && response.data) {
         const data = response.data
-        setTestOutput(prev => prev + `✅ ${suiteId} completed: ${data.status}\n`)
+        appendTestOutput(`✅ ${suiteId} completed: ${data.status}\n`)
         if (data.output) {
-          setTestOutput(prev => prev + data.output + '\n')
+          appendTestOutput(data.output + '\n')
         }
         // Reload test suites to update status
         await loadTestSuites()
       } else {
-        setTestOutput(prev => prev + `❌ Error running ${suiteId}: ${response.error}\n`)
+        appendTestOutput(`❌ Error running ${suiteId}: ${response.error}\n`)
       }
     } catch (error) {
-      setTestOutput(prev => prev + `💥 Exception running ${suiteId}: ${error}\n`)
+      appendTestOutput(`💥 Exception running ${suiteId}: ${error}\n`)
     } finally {
       setRunningTests(prev => prev.filter(id => id !== suiteId))
     }
@@ -291,8 +292,8 @@ const TestSuite: React.FC = () => {
     success('Configuration Saved', 'Test configuration updated successfully!')
   }
 
-  const clearTestOutput = () => {
-    setTestOutput('')
+  const handleClearOutput = () => {
+    clearTestOutput()
     success('Output Cleared', 'Test output has been cleared!')
   }
 
@@ -463,7 +464,7 @@ const TestSuite: React.FC = () => {
                 <Button 
                   variant="secondary" 
                   size="sm" 
-                  onClick={clearTestOutput}
+                  onClick={handleClearOutput}
                   className="text-xs"
                 >
                   Clear Output

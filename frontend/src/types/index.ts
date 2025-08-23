@@ -147,6 +147,7 @@ export interface DashboardState {
   auditEvents: AuditEvent[]
   isConnected: boolean
   lastUpdate: string
+  testOutput: string
 }
 
 // API Response types

@@ -14,6 +14,9 @@ interface DashboardStore extends DashboardState {
   addTestSuite: (suite: TestSuite) => void
   updateTestSuite: (id: string, updates: Partial<TestSuite>) => void
   clearTestResults: () => void
+  setTestOutput: (output: string) => void
+  appendTestOutput: (output: string) => void
+  clearTestOutput: () => void
   
   // Live stream actions
   setLiveStream: (stream: LiveStreamData | null) => void
@@ -54,6 +57,7 @@ const initialState: DashboardState = {
   auditEvents: [],
   isConnected: false,
   lastUpdate: new Date().toISOString(),
+  testOutput: '',
 }
 
 export const useDashboardStore = create<DashboardStore>()(
@@ -98,6 +102,22 @@ export const useDashboardStore = create<DashboardStore>()(
       
       clearTestResults: () =>
         set({ testSuiteResults: [] }, false, 'clearTestResults'),
+      
+      // Test output actions
+      setTestOutput: (output) =>
+        set({ testOutput: output }, false, 'setTestOutput'),
+      
+      appendTestOutput: (output) =>
+        set(
+          (state) => ({
+            testOutput: state.testOutput + output,
+          }),
+          false,
+          'appendTestOutput'
+        ),
+      
+      clearTestOutput: () =>
+        set({ testOutput: '' }, false, 'clearTestOutput'),
       
       // Live stream actions
       setLiveStream: (stream) =>

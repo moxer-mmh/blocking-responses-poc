@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import {
   Shield,
   AlertTriangle,
@@ -26,21 +27,35 @@ const Dashboard: React.FC = () => {
     testSuiteResults,
     lastUpdate,
     updateMetrics,
-    setActiveView,
     setAuditEvents,
+    setTestOutput,
+    appendTestOutput,
   } = useDashboardStore()
 
   const isConnected = useConnection()
   const testStats = useTestSuiteStats()
+  const navigate = useNavigate()
   const { success, error } = useNotifications()
 
   // Quick Action handlers
   const handleRunTestSuite = async () => {
     try {
-      const response = await apiClient.runTestSuite(['basic', 'patterns'])
+      // Clear and start fresh output
+      setTestOutput('🚀 Starting full test suite execution...\n')
+      
+      const response = await apiClient.runTestSuite(['basic', 'patterns', 'presidio', 'streaming'])
       if (response.success && response.data) {
-        // Navigate to test suite page
-        setActiveView('testing')
+        const data = response.data
+        appendTestOutput(`✅ Test session started: ${data.session_id}\n`)
+        appendTestOutput(`📊 Status: ${data.status}\n`)
+        
+        if (data.output) {
+          appendTestOutput(`\n📝 Test Output:\n${data.output}\n`)
+        }
+        
+        // Navigate to test suite page with output preserved
+        navigate('/testing')
+        
         // Show success notification with actual results
         const { passed, failed, total } = response.data.summary || { passed: 0, failed: 0, total: 0 }
         success(
@@ -57,7 +72,7 @@ const Dashboard: React.FC = () => {
 
     const handleViewLiveStream = () => {
     // Navigate to stream monitor page
-    setActiveView('stream')
+    navigate('/stream')
   }
 
   const handleExportAuditReport = async () => {
@@ -444,7 +459,7 @@ const Dashboard: React.FC = () => {
               <Button variant="outline" onClick={handleExportAuditReport}>
                 Export Audit Report
               </Button>
-              <Button variant="ghost" onClick={handleSystemHealthCheck}>
+              <Button variant="success" onClick={handleSystemHealthCheck}>
                 System Health Check
               </Button>
             </div>
