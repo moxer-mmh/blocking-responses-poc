@@ -4,8 +4,8 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import AsyncIterator, Dict, Any, List, Optional
-from pydantic import BaseModel, Field, ConfigDict, SecretStr
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from collections import deque
 from time import monotonic
 import asyncio
@@ -54,10 +54,10 @@ except ImportError:
 try:
     import tiktoken
 
-    enc = tiktoken.get_encoding("cl100k_base")
+    enc = tiktoken.get_encoding("cl100k_base")  # type: ignore
     TIKTOKEN_AVAILABLE = True
 except ImportError:
-    enc = None
+    enc = None  # type: ignore
     TIKTOKEN_AVAILABLE = False
     print("Warning: tiktoken not available. Install with: pip install tiktoken")
 
@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     # CORS and security
     cors_origins: str = "*"
 
-    model_config = ConfigDict(env_file=".env", env_prefix="", case_sensitive=False)
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="", case_sensitive=False)
 
     def get_cors_origins(self) -> List[str]:
         """Parse CORS origins from string to list"""
@@ -103,10 +103,10 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # -------------------- Database Setup --------------------
-Base = declarative_base()
+Base = declarative_base()  # type: ignore
 
 
-class AuditLog(Base):
+class AuditLog(Base):  # type: ignore
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -122,7 +122,7 @@ class AuditLog(Base):
     processing_time_ms = Column(Float, nullable=True)
 
 
-class MetricsSnapshot(Base):
+class MetricsSnapshot(Base):  # type: ignore
     __tablename__ = "metrics_snapshots"
 
     id = Column(Integer, primary_key=True, index=True)
