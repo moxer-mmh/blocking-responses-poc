@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import AsyncIterator, Dict, Any, List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, SecretStr
 from pydantic_settings import BaseSettings
 from collections import deque
 from time import monotonic
@@ -211,7 +211,7 @@ app.add_middleware(
 )
 
 # -------------------- Compliance Policy Configuration --------------------
-COMPLIANCE_POLICY = {
+COMPLIANCE_POLICY: Dict[str, Any] = {
     "threshold": settings.risk_threshold,
     "weights": {
         # PII (Personally Identifiable Information)
@@ -858,7 +858,7 @@ async def chat_stream_demo_mode(request: Request, chat_req: ChatRequest):
 
 # -------------------- LLM Streaming --------------------
 async def upstream_stream(
-    user_input: str, model: str = None, api_key: str = None
+    user_input: str, model: Optional[str] = None, api_key: Optional[str] = None
 ) -> AsyncIterator[str]:
     """Stream from upstream LLM"""
     system_prompt = (
@@ -876,7 +876,7 @@ async def upstream_stream(
         model=model or settings.default_model,
         streaming=True,
         temperature=0.3,
-        api_key=api_key or settings.openai_api_key,
+        api_key=SecretStr(api_key or settings.openai_api_key) if (api_key or settings.openai_api_key) else None,
     )
 
     chain = prompt | llm | StrOutputParser()
@@ -890,7 +890,7 @@ async def upstream_stream(
 
 
 async def safe_rewrite_stream(
-    user_input: str, detected_types: List[str], api_key: str = None
+    user_input: str, detected_types: List[str], api_key: Optional[str] = None
 ) -> AsyncIterator[str]:
     """Generate a safe, compliant rewrite of the response"""
     if not settings.enable_safe_rewrite:
@@ -931,7 +931,7 @@ async def safe_rewrite_stream(
         model=settings.judge_model,
         streaming=True,
         temperature=settings.rewrite_temperature,
-        api_key=api_key or settings.openai_api_key,
+        api_key=SecretStr(api_key or settings.openai_api_key) if (api_key or settings.openai_api_key) else None,
     )
 
     chain = prompt | llm | StrOutputParser()
@@ -1028,7 +1028,7 @@ async def get_audit_logs(
             processed_logs = []
             for log in logs:
                 entities_data = (
-                    json.loads(log.presidio_entities) if log.presidio_entities else []
+                    json.loads(str(log.presidio_entities)) if log.presidio_entities else []
                 )
                 logger.info(f"DEBUG: Raw presidio_entities: {log.presidio_entities}")
                 logger.info(f"DEBUG: Parsed entities_data: {entities_data}")
@@ -1058,7 +1058,7 @@ async def get_audit_logs(
                     "decision_reason": f"Risk score: {log.risk_score:.2f} - {'Content blocked due to compliance violations' if log.blocked_content_hash else 'Content processed successfully - no violations detected'}",
                     "entities_detected": formatted_entities,
                     "patterns_detected": (
-                        json.loads(log.triggered_rules) if log.triggered_rules else []
+                        json.loads(str(log.triggered_rules)) if log.triggered_rules else []
                     ),
                     "content_hash": log.blocked_content_hash or log.user_input_hash,
                     "processing_time_ms": log.processing_time_ms,
@@ -1098,7 +1098,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
         vetoed = False
         last_flush = monotonic()
         start_time = monotonic()  # Track processing start time
-        token_buffer = deque()
+        token_buffer: deque = deque()
         window_text = ""
         event_id = 0
         max_risk_score = 0.0
@@ -1110,7 +1110,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
         ).hexdigest()[:12]
         user_input_hash = hashlib.sha256(chat_req.message.encode()).hexdigest()[:16]
 
-        async def emit_event(data: str, event: str = "chunk", event_id_val: int = None):
+        async def emit_event(data: str, event: str = "chunk", event_id_val: Optional[int] = None):
             nonlocal event_id
             if event_id_val is None:
                 event_id += 1
@@ -1329,7 +1329,14 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
 @app.get("/chat/stream")
 async def chat_stream_get(request: Request, q: str):
     """Legacy GET endpoint"""
-    chat_req = ChatRequest(message=q)
+    chat_req = ChatRequest(
+        message=q,
+        delay_tokens=None,
+        delay_ms=None,
+        risk_threshold=None,
+        region=None,
+        api_key=None
+    )
     return await chat_stream_sse(request, chat_req)
 
 
@@ -1841,7 +1848,7 @@ async def get_compliance_audit_logs(
             audit_events = []
             for log in logs:
                 entities_data = (
-                    json.loads(log.presidio_entities) if log.presidio_entities else []
+                    json.loads(str(log.presidio_entities)) if log.presidio_entities else []
                 )
                 logger.info(f"DEBUG: Raw presidio_entities: {log.presidio_entities}")
                 logger.info(f"DEBUG: Parsed entities_data: {entities_data}")
@@ -1874,7 +1881,7 @@ async def get_compliance_audit_logs(
                         "decision_reason": f"Risk score: {log.risk_score:.2f} - {'Content blocked due to compliance violations' if log.blocked_content_hash else 'Content processed successfully - no violations detected'}",
                         "entities_detected": formatted_entities,
                         "patterns_detected": (
-                            json.loads(log.triggered_rules)
+                            json.loads(str(log.triggered_rules))
                             if log.triggered_rules
                             else []
                         ),
