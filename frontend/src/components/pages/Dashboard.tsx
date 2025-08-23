@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Shield,
@@ -16,6 +16,7 @@ import { formatNumber, formatPercent, formatters } from '@/utils'
 import MetricsChart from '@/components/charts/MetricsChart'
 import ComplianceBreakdown from '@/components/charts/ComplianceBreakdown'
 import RecentActivity from '@/components/RecentActivity'
+import { apiClient } from '@/utils/api'
 
 const Dashboard: React.FC = () => {
   const {
@@ -23,9 +24,41 @@ const Dashboard: React.FC = () => {
     testSuiteResults,
     isConnected,
     lastUpdate,
+    setIsConnected,
+    updateMetrics,
   } = useDashboardStore()
 
   const testStats = useTestSuiteStats()
+
+  // Test API connection and fetch initial data
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const healthResponse = await apiClient.getHealth()
+        if (healthResponse.success) {
+          setIsConnected(true)
+          
+          // Fetch initial metrics
+          const metricsResponse = await apiClient.getMetrics()
+          if (metricsResponse.success && metricsResponse.data) {
+            updateMetrics(metricsResponse.data)
+          }
+        } else {
+          setIsConnected(false)
+        }
+      } catch (error) {
+        console.error('Connection test failed:', error)
+        setIsConnected(false)
+      }
+    }
+
+    testConnection()
+    
+    // Set up periodic connection checking and metrics refresh
+    const interval = setInterval(testConnection, 30000) // Every 30 seconds
+    
+    return () => clearInterval(interval)
+  }, [setIsConnected, updateMetrics])
 
   const containerVariants = {
     hidden: { opacity: 0 },

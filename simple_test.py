@@ -3,7 +3,7 @@
 
 import json
 import asyncio
-from app import risk_patterns, app
+from app import pattern_detector, app
 
 def test_risk_patterns():
     """Test the risk assessment patterns"""
@@ -19,7 +19,7 @@ def test_risk_patterns():
     ]
     
     for text, description in test_cases:
-        assessment = risk_patterns.assess_risk(text)
+        assessment = pattern_detector.assess_compliance_risk(text)
         print(f"\n{description}:")
         print(f"  Text: {text}")
         print(f"  Risk Score: {assessment.score:.2f}")
