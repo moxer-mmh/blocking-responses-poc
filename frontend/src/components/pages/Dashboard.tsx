@@ -209,27 +209,27 @@ const Dashboard: React.FC = () => {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="space-y-6"
+      className="space-y-4 sm:space-y-6"
     >
-      {/* Hero Stats */}
+      {/* Hero Stats - Responsive Grid */}
       <motion.div
         variants={itemVariants}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
       >
         <Card className="gradient-primary text-white border-0">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100 text-sm font-medium">Total Requests</p>
-                <p className="text-3xl font-bold">
+                <p className="text-blue-100 text-xs sm:text-sm font-medium">Total Requests</p>
+                <p className="text-2xl sm:text-3xl font-bold">
                   {formatNumber(realtimeMetrics.total_requests)}
                 </p>
-                <p className="text-blue-100 text-sm mt-1">
+                <p className="text-blue-100 text-xs sm:text-sm mt-1">
                   {realtimeMetrics.performance_metrics.requests_per_second.toFixed(1)} req/sec
                 </p>
               </div>
-              <div className="bg-white/20 p-3 rounded-lg">
-                <Activity className="w-8 h-8" />
+              <div className="bg-white/20 p-2 sm:p-3 rounded-lg">
+                <Activity className="w-6 h-6 sm:w-8 sm:h-8" />
               </div>
             </div>
           </CardContent>
@@ -239,14 +239,14 @@ const Dashboard: React.FC = () => {
           blockRate > 10 ? 'gradient-danger' : 
           blockRate > 5 ? 'gradient-warning' : 'gradient-success'
         }`}>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white/80 text-sm font-medium">Block Rate</p>
-                <p className="text-3xl font-bold">
+                <p className="text-white/80 text-xs sm:text-sm font-medium">Block Rate</p>
+                <p className="text-2xl sm:text-3xl font-bold">
                   {formatPercent(blockRate / 100)}
                 </p>
-                <p className="text-white/80 text-sm mt-1">
+                <p className="text-white/80 text-xs sm:text-sm mt-1">
                   {realtimeMetrics.blocked_requests} blocked
                 </p>
               </div>
@@ -364,38 +364,42 @@ const Dashboard: React.FC = () => {
         </motion.div>
       )}
 
-      {/* Charts Section */}
-      <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Charts Section - Responsive Grid */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Performance Metrics</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Performance Metrics</CardTitle>
           </CardHeader>
-          <CardContent>
-            <MetricsChart />
+          <CardContent className="p-3 sm:p-6">
+            <div className="h-64 sm:h-80">
+              <MetricsChart />
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Compliance Breakdown</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Compliance Breakdown</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ComplianceBreakdown />
+          <CardContent className="p-3 sm:p-6">
+            <div className="h-96 sm:h-[36rem] overflow-auto">
+              <ComplianceBreakdown />
+            </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      {/* Detection Summary */}
+      {/* Detection Summary - Responsive Layout */}
       <motion.div variants={itemVariants}>
         <Card>
           <CardHeader>
-            <CardTitle>Detection Summary</CardTitle>
+            <CardTitle className="text-sm sm:text-base">Detection Summary</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <CardContent className="p-3 sm:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
               {/* Pattern Detections */}
               <div>
-                <h4 className="font-semibold mb-4 text-gray-900 dark:text-white">
+                <h4 className="font-semibold mb-4 text-gray-900 dark:text-white text-sm sm:text-base">
                   Pattern Detections ({totalPatternDetections})
                 </h4>
                 <div className="space-y-3">

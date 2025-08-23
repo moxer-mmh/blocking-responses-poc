@@ -243,10 +243,10 @@ const StreamMonitor: React.FC = () => {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
             Live Stream Monitor
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
@@ -254,15 +254,17 @@ const StreamMonitor: React.FC = () => {
           </p>
         </div>
         
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2 sm:space-x-3">
           {!isStreaming && tokens.length > 0 && (
             <Button 
               variant="outline" 
               size="sm"
               onClick={handleExportSession}
               icon={<Download className="w-4 h-4" />}
+              className="flex-shrink-0"
             >
-              Export Session
+              <span className="hidden sm:inline">Export Session</span>
+              <span className="sm:hidden">Export</span>
             </Button>
           )}
           <Button 
@@ -270,8 +272,14 @@ const StreamMonitor: React.FC = () => {
             onClick={() => isStreaming ? handleStopStream() : handleStartStream()}
             icon={isStreaming ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             disabled={isStreaming ? false : !message.trim()}
+            className="flex-shrink-0"
           >
-            {isStreaming ? 'Stop Stream' : 'Start Stream'}
+            <span className="hidden sm:inline">
+              {isStreaming ? 'Stop Stream' : 'Start Stream'}
+            </span>
+            <span className="sm:hidden">
+              {isStreaming ? 'Stop' : 'Start'}
+            </span>
           </Button>
         </div>
       </motion.div>
@@ -302,8 +310,8 @@ const StreamMonitor: React.FC = () => {
           <CardHeader>
             <CardTitle size="sm">Test Message</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex space-x-3">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row gap-3">
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -316,24 +324,27 @@ const StreamMonitor: React.FC = () => {
                 disabled={!message.trim() || isStreaming}
                 onClick={handleStartStream}
                 icon={<Send className="w-4 h-4" />}
+                className="self-start sm:self-center"
               >
-                Stream
+                <span className="hidden sm:inline">Stream</span>
+                <span className="sm:hidden">Start Stream</span>
               </Button>
             </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
         {/* Token Visualization */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
+          className="order-1"
         >
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <CardTitle size="sm">Token Flow</CardTitle>
                 <Badge variant={isStreaming ? "info" : "secondary"}>
                   {isStreaming ? "Streaming" : "Idle"}
@@ -341,7 +352,7 @@ const StreamMonitor: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 min-h-[300px]">
+              <div className="space-y-3 min-h-[200px] sm:min-h-[300px] max-h-[400px] overflow-y-auto">
                 <AnimatePresence mode="popLayout">
                   {tokens.map((token, index) => (
                     <motion.div
@@ -354,7 +365,7 @@ const StreamMonitor: React.FC = () => {
                         duration: 0.2 
                       }}
                       className={`
-                        flex items-center justify-between p-3 rounded-lg border-l-4
+                        flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border-l-4 gap-2
                         ${token.blocked 
                           ? 'border-red-500 bg-red-50 dark:bg-red-900/20' 
                           : token.risk >= 0.7
@@ -365,28 +376,28 @@ const StreamMonitor: React.FC = () => {
                         }
                       `}
                     >
-                      <div className="flex items-center space-x-3">
-                        <span className="font-mono text-sm font-medium">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
+                        <span className="font-mono text-sm font-medium break-all">
                           "{token.text}"
                         </span>
-                        {token.blocked && (
-                          <Badge variant="danger" size="sm">
-                            BLOCKED
-                          </Badge>
-                        )}
-                        {token.entities && token.entities.length > 0 && (
-                          <div className="flex space-x-1">
-                            {token.entities.map((entity, idx) => (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {token.blocked && (
+                            <Badge variant="danger" size="sm">
+                              BLOCKED
+                            </Badge>
+                          )}
+                          {token.entities && token.entities.length > 0 && (
+                            token.entities.map((entity, idx) => (
                               <Badge key={idx} variant="warning" size="sm">
                                 {typeof entity === 'string' ? entity : ((entity as any)?.entity_type || 'Unknown')}
                               </Badge>
-                            ))}
-                          </div>
-                        )}
+                            ))
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
                         <RiskBadge score={token.risk} />
-                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono hidden sm:inline">
                           {token.timestamp}
                         </span>
                       </div>

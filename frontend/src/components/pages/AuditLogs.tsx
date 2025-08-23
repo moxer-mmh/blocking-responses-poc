@@ -297,10 +297,10 @@ const AuditLogs: React.FC = () => {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
             Audit Logs
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
@@ -308,49 +308,58 @@ const AuditLogs: React.FC = () => {
           </p>
         </div>
         
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2 sm:space-x-3">
           <Button 
             variant="outline" 
             size="sm" 
             onClick={handleRefresh}
             disabled={loading}
+            className="flex-shrink-0"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button 
             variant={autoRefresh ? "primary" : "outline"}
             size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
+            className="flex-shrink-0"
           >
-            {autoRefresh ? '⏸️ Stop Auto' : '🔄 Auto Refresh'}
+            <span className="hidden sm:inline">
+              {autoRefresh ? '⏸️ Stop Auto' : '🔄 Auto Refresh'}
+            </span>
+            <span className="sm:hidden">
+              {autoRefresh ? '⏸️' : '🔄'}
+            </span>
           </Button>
           <Button 
             variant="outline" 
             size="sm"
             onClick={handleExportCSV}
             disabled={loading || filteredEvents.length === 0}
+            className="flex-shrink-0"
           >
             <Download className="w-4 h-4 mr-2" />
-            Export CSV
+            <span className="hidden sm:inline">Export CSV</span>
           </Button>
           <Button 
             variant="outline" 
             size="sm"
             onClick={handleDateRange}
+            className="flex-shrink-0"
           >
             <Calendar className="w-4 h-4 mr-2" />
-            Date Range
+            <span className="hidden sm:inline">Date Range</span>
           </Button>
           {(dateRange.start || dateRange.end) && (
             <Button 
               variant="outline" 
               size="sm"
               onClick={clearDateRange}
-              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex-shrink-0"
             >
               <X className="w-4 h-4 mr-2" />
-              Clear Filter
+              <span className="hidden sm:inline">Clear Filter</span>
             </Button>
           )}
         </div>
@@ -403,18 +412,18 @@ const AuditLogs: React.FC = () => {
         transition={{ delay: 0.1 }}
       >
         <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center gap-4">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
               {/* Search */}
-              <div className="flex-1 min-w-64">
+              <div className="flex-1 min-w-0">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="text"
-                    placeholder="Search by event type, session ID, patterns, entities, risk score..."
+                    placeholder="Search by event type, session ID, patterns, entities..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="w-full pl-10 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                   />
                   {searchTerm && (
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -428,38 +437,40 @@ const AuditLogs: React.FC = () => {
                   )}
                 </div>
                 {searchTerm && (
-                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
                     💡 Try searching for: "blocked", "PERSON", "email", "high risk", session IDs, or compliance types
                   </div>
                 )}
               </div>
 
-              {/* Compliance Type Filter */}
-              <div className="flex items-center space-x-2">
-                <Filter className="w-4 h-4 text-gray-400" />
-                <select
-                  value={selectedComplianceType}
-                  onChange={(e) => handleComplianceTypeChange(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="all">All Types</option>
-                  <option value="HIPAA">HIPAA</option>
-                  <option value="PCI_DSS">PCI DSS</option>
-                  <option value="GDPR">GDPR</option>
-                  <option value="CCPA">CCPA</option>
-                  <option value="PII">PII</option>
-                  <option value="PHI">PHI</option>
-                </select>
-              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                {/* Compliance Type Filter */}
+                <div className="flex items-center space-x-2">
+                  <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <select
+                    value={selectedComplianceType}
+                    onChange={(e) => handleComplianceTypeChange(e.target.value)}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm min-w-0"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="HIPAA">HIPAA</option>
+                    <option value="PCI_DSS">PCI DSS</option>
+                    <option value="GDPR">GDPR</option>
+                    <option value="CCPA">CCPA</option>
+                    <option value="PII">PII</option>
+                    <option value="PHI">PHI</option>
+                  </select>
+                </div>
 
-              {/* Results Count */}
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                {loading ? 'Loading...' : `${filteredEvents.length} events`}
-                {(dateRange.start || dateRange.end) && (
-                  <span className="ml-2 text-blue-600 dark:text-blue-400">
-                    • Date filtered: {dateRange.start} to {dateRange.end}
-                  </span>
-                )}
+                {/* Results Count */}
+                <div className="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0">
+                  {loading ? 'Loading...' : `${filteredEvents.length} events`}
+                  {(dateRange.start || dateRange.end) && (
+                    <span className="ml-2 text-blue-600 dark:text-blue-400 hidden lg:inline">
+                      • Date filtered: {dateRange.start} to {dateRange.end}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -491,17 +502,17 @@ const AuditLogs: React.FC = () => {
               transition={{ delay: 0.1 * index }}
             >
               <Card hover>
-                <CardContent className="p-6">
-                  <div className="flex items-start space-x-4">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4">
                     {/* Event Icon */}
-                    <div className="flex-shrink-0 mt-1">
+                    <div className="flex-shrink-0 sm:mt-1">
                       {getEventIcon(event)}
                     </div>
 
                     {/* Event Details */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <ComplianceBadge type={event.compliance_type} />
                           <RiskBadge score={event.risk_score} />
                           <Badge 
@@ -511,14 +522,14 @@ const AuditLogs: React.FC = () => {
                             {event.blocked ? 'BLOCKED' : 'ALLOWED'}
                           </Badge>
                         </div>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                        <span className="text-sm text-gray-500 dark:text-gray-400 sm:flex-shrink-0">
                           {formatters.datetime(event.timestamp)}
                         </span>
                       </div>
 
-                      <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                      <h3 className="font-medium text-gray-900 dark:text-white mb-2 text-sm sm:text-base">
                         {event.event_type.replace(/_/g, ' ')} 
-                        <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
+                        <span className="text-gray-500 dark:text-gray-400 font-normal ml-2 block sm:inline">
                           (Session: {event.session_id})
                         </span>
                       </h3>
@@ -533,7 +544,7 @@ const AuditLogs: React.FC = () => {
                           <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
                             DETECTED ENTITIES
                           </h4>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1 sm:gap-2">
                             {event.entities_detected.map((entity, idx) => {
                               const entityName = typeof entity === 'string' ? entity : (entity?.entity_type || 'Unknown')
                               const confidence = typeof entity === 'object' && entity?.score ? (entity.score * 100).toFixed(0) : '0'
@@ -560,7 +571,7 @@ const AuditLogs: React.FC = () => {
                           <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
                             TRIGGERED PATTERNS
                           </h4>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1 sm:gap-2">
                             {event.patterns_detected.map((pattern) => (
                               <span
                                 key={pattern}
@@ -574,18 +585,22 @@ const AuditLogs: React.FC = () => {
                       )}
 
                       {/* Metadata */}
-                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <div className="flex items-center space-x-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-gray-500 dark:text-gray-400 gap-2">
+                        <div className="flex flex-wrap items-center gap-3">
                           <span>Risk Score: {event.risk_score.toFixed(2)}</span>
-                          {event.content_hash && <span>Hash: {event.content_hash}</span>}
+                          {event.content_hash && (
+                            <span className="hidden sm:inline">Hash: {event.content_hash}</span>
+                          )}
                         </div>
                         <Button 
                           variant="ghost" 
                           size="sm"
                           onClick={() => handleViewDetails(event)}
+                          className="self-start sm:self-center"
                         >
                           <Eye className="w-3 h-3 mr-1" />
-                          View Details
+                          <span className="hidden sm:inline">View Details</span>
+                          <span className="sm:hidden">Details</span>
                         </Button>
                       </div>
                     </div>
@@ -631,14 +646,16 @@ const AuditLogs: React.FC = () => {
 
       {/* Date Range Modal */}
       {showDateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96 max-w-lg border dark:border-gray-700"
+            className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-sm sm:max-w-md border dark:border-gray-700"
           >
-            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Select Date Range</h3>
-            <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white p-4 border-b border-gray-200 dark:border-gray-700">
+              Select Date Range
+            </h3>
+            <div className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Start Date
@@ -662,16 +679,18 @@ const AuditLogs: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="flex justify-end space-x-3 mt-6">
+            <div className="flex flex-col sm:flex-row justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
               <Button
                 variant="outline"
                 onClick={() => setShowDateModal(false)}
+                className="order-2 sm:order-1"
               >
                 Cancel
               </Button>
               <Button
                 onClick={applyDateRange}
                 disabled={!tempDateRange.start || !tempDateRange.end}
+                className="order-1 sm:order-2"
               >
                 Apply Filter
               </Button>
@@ -702,22 +721,22 @@ const AuditLogs: React.FC = () => {
               </div>
             </div>
             
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* Basic Information */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Basic Information</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">Basic Information</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Event ID</label>
-                        <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 font-mono">{selectedEvent.id}</p>
+                        <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 font-mono break-all">{selectedEvent.id}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Session ID</label>
-                        <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 font-mono">{selectedEvent.session_id}</p>
+                        <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 font-mono break-all">{selectedEvent.session_id}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Event Type</label>
@@ -736,7 +755,7 @@ const AuditLogs: React.FC = () => {
                 {/* Compliance & Risk */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Compliance & Risk</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">Compliance & Risk</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
@@ -772,9 +791,9 @@ const AuditLogs: React.FC = () => {
               </div>
 
               {/* Decision Reason */}
-              <Card className="mt-6">
+              <Card className="mt-4 sm:mt-6">
                 <CardHeader>
-                  <CardTitle>Decision Reason</CardTitle>
+                  <CardTitle className="text-base sm:text-lg">Decision Reason</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-gray-900 dark:text-gray-100">{selectedEvent.decision_reason}</p>
@@ -783,9 +802,9 @@ const AuditLogs: React.FC = () => {
 
               {/* Entities Detected */}
               {selectedEvent.entities_detected.length > 0 && (
-                <Card className="mt-6">
+                <Card className="mt-4 sm:mt-6">
                   <CardHeader>
-                    <CardTitle>Entities Detected</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">Entities Detected</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
@@ -794,7 +813,7 @@ const AuditLogs: React.FC = () => {
                         const confidence = typeof entity === 'object' && entity?.score ? (entity.score * 100).toFixed(1) : '0.0'
                         
                         return (
-                          <div key={index} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg gap-2">
                             <span className="font-medium text-gray-900 dark:text-gray-100">
                               {entityName}
                             </span>

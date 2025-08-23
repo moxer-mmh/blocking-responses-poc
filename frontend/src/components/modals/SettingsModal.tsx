@@ -31,7 +31,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -46,11 +46,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="relative w-full max-w-2xl mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden"
+        className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Settings</h2>
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Settings</h2>
           <button
             onClick={onClose}
             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -60,19 +60,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 max-h-96 overflow-y-auto">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
           {/* Theme Settings */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Palette className="w-5 h-5" />
+              <CardTitle className="flex items-center space-x-2 text-sm sm:text-base">
+                <Palette className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Appearance</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</label>
-                <div className="flex space-x-3">
+                <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3">
                   {[
                     { value: 'light', label: 'Light' },
                     { value: 'dark', label: 'Dark' },
@@ -81,7 +81,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     <button
                       key={option.value}
                       onClick={() => setTheme(option.value as any)}
-                      className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                      className={`px-4 py-2 text-sm rounded-lg transition-colors flex-1 sm:flex-none ${
                         theme === option.value
                           ? 'bg-primary-600 text-white'
                           : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -98,13 +98,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           {/* Security Settings */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Shield className="w-5 h-5" />
+              <CardTitle className="flex items-center space-x-2 text-sm sm:text-base">
+                <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Security & Compliance</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700 dark:text-gray-300">Audit Logging</span>
                   <span className="px-2 py-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 rounded">Enabled</span>
@@ -124,8 +124,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           {/* API Configuration */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Key className="w-5 h-5" />
+              <CardTitle className="flex items-center space-x-2 text-sm sm:text-base">
+                <Key className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>API Configuration</span>
               </CardTitle>
             </CardHeader>
@@ -141,14 +141,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                       placeholder="sk-..."
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg 
-                               bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                      className="w-full px-3 py-2 pr-16 sm:pr-10 border border-gray-300 dark:border-gray-600 rounded-lg 
+                               bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm
                                focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs sm:text-sm"
                     >
                       {showApiKey ? 'Hide' : 'Show'}
                     </button>
@@ -164,13 +164,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           {/* Notification Settings */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Bell className="w-5 h-5" />
+              <CardTitle className="flex items-center space-x-2 text-sm sm:text-base">
+                <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Notifications</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700 dark:text-gray-300">Compliance Alerts</span>
                   <input type="checkbox" defaultChecked className="rounded" />
@@ -189,11 +189,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex-shrink-0">
+          <Button variant="outline" onClick={onClose} className="order-2 sm:order-1">
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSave}>
+          <Button variant="primary" onClick={handleSave} className="order-1 sm:order-2">
             Save Changes
           </Button>
         </div>

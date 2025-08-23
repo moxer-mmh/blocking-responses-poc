@@ -82,6 +82,7 @@ const TestSuite: React.FC = () => {
   ])
   const [runningTests, setRunningTests] = useState<string[]>([])
   const [pollingInterval, setPollingInterval] = useState<number | null>(null)
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const isConnected = useConnection()
 
   // Load test suites on component mount
@@ -350,34 +351,93 @@ const TestSuite: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+        <div className="space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Test Suite Runner
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+            Test Suite
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Execute comprehensive compliance tests and monitor results in real-time
+            Comprehensive testing and validation framework
           </p>
         </div>
         
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" size="sm" onClick={handleConfigure}>
-            <Settings className="w-4 h-4 mr-2" />
-            Configure
+        <div className="flex flex-wrap items-center gap-2 sm:space-x-3">
+          <Button 
+            onClick={handleRunTests}
+            disabled={isRunning || runningTests.length > 0}
+            className="flex-shrink-0"
+          >
+            {isRunning ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Play className="w-4 h-4 mr-2" />
+            )}
+            <span className="hidden sm:inline">
+              {isRunning ? 'Running All Tests...' : 'Run All Tests'}
+            </span>
+            <span className="sm:hidden">
+              {isRunning ? 'Running...' : 'Run All'}
+            </span>
+          </Button>
+          
+          <div className="relative">
+            <Button 
+              variant="outline"
+              onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+              className="flex-shrink-0"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Export Results</span>
+              <span className="sm:hidden">Export</span>
+            </Button>
+            
+            {showDownloadMenu && (
+              <div className="absolute right-0 mt-2 w-32 sm:w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10">
+                <div className="py-1">
+                  <button
+                    onClick={() => { handleDownloadTestResults('csv'); setShowDownloadMenu(false) }}
+                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 w-full text-left"
+                  >
+                    Download CSV
+                  </button>
+                  <button
+                    onClick={() => { handleDownloadTestResults('json'); setShowDownloadMenu(false) }}
+                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 w-full text-left"
+                  >
+                    Download JSON
+                  </button>
+                  <button
+                    onClick={() => { handleDownloadTestResults('pdf'); setShowDownloadMenu(false) }}
+                    className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 w-full text-left"
+                  >
+                    Download PDF
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <Button 
+            variant="outline" 
+            onClick={loadTestSuites}
+            disabled={isRunning}
+            className="flex-shrink-0"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button 
-            variant="primary"
-            loading={isRunning}
-            onClick={handleRunTests}
-            icon={isRunning ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+            variant="ghost" 
+            onClick={handleConfigure}
+            className="flex-shrink-0"
           >
-            {isRunning ? 'Running Tests...' : 'Run All Tests'}
+            <Settings className="w-4 h-4" />
           </Button>
         </div>
       </motion.div>
@@ -403,7 +463,7 @@ const TestSuite: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6"
       >
         {testSuites.map((suite: any, index: number) => (
           <motion.div
@@ -414,8 +474,8 @@ const TestSuite: React.FC = () => {
           >
             <Card hover className="h-full">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle size="sm">{suite.name}</CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <CardTitle size="sm" className="text-base sm:text-lg">{suite.name}</CardTitle>
                   <StatusBadge status={suite.status} animate />
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -450,7 +510,7 @@ const TestSuite: React.FC = () => {
                   {/* Test Results */}
                   <div className="grid grid-cols-3 gap-2">
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-success-600 dark:text-success-400">
+                      <div className="text-xl sm:text-2xl font-bold text-success-600 dark:text-success-400">
                         {suite.passed}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -458,7 +518,7 @@ const TestSuite: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-danger-600 dark:text-danger-400">
+                      <div className="text-xl sm:text-2xl font-bold text-danger-600 dark:text-danger-400">
                         {suite.failed}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -466,7 +526,7 @@ const TestSuite: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-warning-600 dark:text-warning-400">
+                      <div className="text-xl sm:text-2xl font-bold text-warning-600 dark:text-warning-400">
                         {(suite as any).warnings || 0}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -476,7 +536,7 @@ const TestSuite: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex space-x-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Button 
                       variant="secondary" 
                       size="sm" 
@@ -489,10 +549,16 @@ const TestSuite: React.FC = () => {
                       ) : (
                         <Play className="w-3 h-3 mr-1" />
                       )}
-                      {runningTests.includes(suite.id) ? 'Running...' : 'Run'}
+                      {runningTests.includes(suite.id) ? 'Running...' : 'Run Suite'}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDownloadTestResults(suite.id)}>
-                      <Download className="w-3 h-3" />
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => handleDownloadTestResults('csv')}
+                      className="sm:w-auto w-full"
+                    >
+                      <Download className="w-3 h-3 mr-1 sm:mr-0" />
+                      <span className="sm:hidden">Download Results</span>
                     </Button>
                   </div>
                 </div>

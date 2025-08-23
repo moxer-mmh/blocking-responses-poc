@@ -10,6 +10,7 @@ import {
   Settings,
   RefreshCw,
   ChevronRight,
+  Menu,
 } from 'lucide-react'
 import { useDashboardStore } from '@/stores/dashboard'
 import { formatters } from '@/utils'
@@ -17,7 +18,11 @@ import { notificationManager } from '@/utils/notifications'
 import SettingsModal from '@/components/modals/SettingsModal'
 import NotificationsModal from '@/components/modals/NotificationsModal'
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  onMobileMenuToggle: () => void
+}
+
+const Header: React.FC<HeaderProps> = ({ onMobileMenuToggle }) => {
   const {
     theme,
     setTheme,
@@ -119,14 +124,22 @@ const Header: React.FC = () => {
       <motion.header
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4"
+        className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 py-4"
       >
         <div className="flex items-center justify-between">
-          {/* Page Title & Breadcrumb */}
-          <div className="flex items-center space-x-4">
-            <div>
-              {/* Breadcrumb */}
-              <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400 mb-1">
+          {/* Mobile Menu Button + Page Title & Breadcrumb */}
+          <div className="flex items-center space-x-3 min-w-0 flex-1">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={onMobileMenuToggle}
+              className="lg:hidden p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            
+            <div className="min-w-0 flex-1">
+              {/* Breadcrumb - Hidden on small screens */}
+              <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400 mb-1">
                 {pageInfo.breadcrumb.map((crumb, index) => (
                   <React.Fragment key={crumb}>
                     {index > 0 && <ChevronRight className="w-4 h-4" />}
@@ -136,20 +149,20 @@ const Header: React.FC = () => {
                   </React.Fragment>
                 ))}
               </div>
-              {/* Page Title */}
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {/* Page Title - Responsive sizing */}
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
                 {pageInfo.title}
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="hidden sm:block text-sm text-gray-500 dark:text-gray-400 truncate">
                 {pageInfo.subtitle}
               </p>
             </div>
           </div>
 
           {/* Status & Actions */}
-          <div className="flex items-center space-x-4">
-            {/* Real-time Stats */}
-            <div className="hidden md:flex items-center space-x-6 px-4 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Real-time Stats - Responsive display */}
+            <div className="hidden lg:flex items-center space-x-6 px-4 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -176,6 +189,22 @@ const Header: React.FC = () => {
                   {formatters.relative(lastUpdate)}
                 </span>
               </div>
+            </div>
+
+            {/* Compact stats for tablet */}
+            <div className="hidden md:flex lg:hidden items-center space-x-3 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {realtimeMetrics.total_requests}
+              </span>
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  realtimeMetrics.block_rate > 10
+                    ? 'bg-danger-500'
+                    : realtimeMetrics.block_rate > 5
+                    ? 'bg-warning-500'
+                    : 'bg-success-500'
+                }`}
+              />
             </div>
 
             {/* Notifications */}

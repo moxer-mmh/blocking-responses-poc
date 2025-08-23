@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
   TestTube2,
@@ -38,16 +38,41 @@ const navigation = [
   },
 ]
 
-const Sidebar: React.FC = () => {
+const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const location = useLocation()
   const { isConnected } = useDashboardStore()
 
   return (
-    <motion.div
-      initial={{ x: -300 }}
-      animate={{ x: 0 }}
-      className="flex flex-col w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700"
-    >
+    <>
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="lg:hidden fixed inset-0 z-40 bg-gray-600 bg-opacity-75"
+            onClick={onClose}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <motion.div
+        initial={{ x: -300 }}
+        animate={{ 
+          x: 0,
+        }}
+        className={cn(
+          "flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700",
+          // Desktop: Always visible, fixed width
+          "lg:flex lg:w-64",
+          // Mobile/Tablet: Hidden by default, overlay when open
+          isOpen 
+            ? "fixed inset-y-0 left-0 z-50 w-64 flex lg:hidden"
+            : "hidden lg:flex"
+        )}
+      >
       {/* Logo/Brand */}
       <div className="flex items-center justify-center h-16 px-6 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-3">
@@ -79,6 +104,7 @@ const Sidebar: React.FC = () => {
             >
               <NavLink
                 to={item.href}
+                onClick={onClose}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 group',
@@ -138,6 +164,7 @@ const Sidebar: React.FC = () => {
         </div>
       </div>
     </motion.div>
+    </>
   )
 }
 
