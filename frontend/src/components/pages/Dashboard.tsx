@@ -13,6 +13,7 @@ import { Badge, RiskBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { useDashboardStore, useTestSuiteStats } from '@/stores/dashboard'
 import { formatNumber, formatPercent, formatters } from '@/utils'
+import { useConnection } from '@/utils/useConnection'
 import MetricsChart from '@/components/charts/MetricsChart'
 import ComplianceBreakdown from '@/components/charts/ComplianceBreakdown'
 import RecentActivity from '@/components/RecentActivity'
@@ -22,43 +23,108 @@ const Dashboard: React.FC = () => {
   const {
     realtimeMetrics,
     testSuiteResults,
-    isConnected,
     lastUpdate,
-    setIsConnected,
     updateMetrics,
+    setActiveView,
   } = useDashboardStore()
 
+  const isConnected = useConnection()
   const testStats = useTestSuiteStats()
 
-  // Test API connection and fetch initial data
+  // Quick Action handlers
+  const handleRunTestSuite = async () => {
+    try {
+      const response = await apiClient.runTestSuite(['basic', 'patterns'])
+      if (response.success) {
+        // Navigate to test suite page
+        setActiveView('testing')
+        console.log('Test suite started:', response.data?.session_id)
+      } else {
+        console.error('Failed to start test suite:', response.error)
+      }
+    } catch (error) {
+      console.error('Error starting test suite:', error)
+    }
+  }
+
+  const handleViewLiveStream = () => {
+    // Navigate to stream monitor
+    setActiveView('stream')
+  }
+
+  const handleExportAuditReport = async () => {
+    try {
+      const response = await apiClient.getAuditLogs({ limit: 1000 })
+      if (response.success && response.data) {
+        // Create CSV data
+        const csvData = response.data.events.map(event => ({
+          timestamp: event.timestamp,
+          event_type: event.event_type,
+          compliance_type: event.compliance_type,
+          risk_score: event.risk_score,
+          blocked: event.blocked,
+          session_id: event.session_id
+        }))
+        
+        // Convert to CSV string
+        const csvContent = [
+          'Timestamp,Event Type,Compliance Type,Risk Score,Blocked,Session ID',
+          ...csvData.map(row => 
+            `${row.timestamp},${row.event_type},${row.compliance_type},${row.risk_score},${row.blocked},${row.session_id}`
+          )
+        ].join('\n')
+        
+        // Download CSV
+        const blob = new Blob([csvContent], { type: 'text/csv' })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `audit-report-${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error('Error exporting audit report:', error)
+    }
+  }
+
+  const handleSystemHealthCheck = async () => {
+    try {
+      const response = await apiClient.getHealth()
+      if (response.success) {
+        alert(`System Status: ${response.data?.status}\nVersion: ${response.data?.version}\nAll dependencies healthy!`)
+      } else {
+        alert(`System Health Check Failed: ${response.error}`)
+      }
+    } catch (error) {
+      alert(`Health Check Error: ${error}`)
+    }
+  }
+
+  // Fetch initial metrics data
   useEffect(() => {
-    const testConnection = async () => {
-      try {
-        const healthResponse = await apiClient.getHealth()
-        if (healthResponse.success) {
-          setIsConnected(true)
-          
-          // Fetch initial metrics
+    const fetchMetrics = async () => {
+      if (isConnected) {
+        try {
           const metricsResponse = await apiClient.getMetrics()
           if (metricsResponse.success && metricsResponse.data) {
             updateMetrics(metricsResponse.data)
           }
-        } else {
-          setIsConnected(false)
+        } catch (error) {
+          console.error('Failed to fetch metrics:', error)
         }
-      } catch (error) {
-        console.error('Connection test failed:', error)
-        setIsConnected(false)
       }
     }
 
-    testConnection()
+    fetchMetrics()
     
-    // Set up periodic connection checking and metrics refresh
-    const interval = setInterval(testConnection, 30000) // Every 30 seconds
+    // Set up periodic metrics refresh
+    const interval = setInterval(fetchMetrics, 30000) // Every 30 seconds
     
     return () => clearInterval(interval)
-  }, [setIsConnected, updateMetrics])
+  }, [isConnected, updateMetrics])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -351,16 +417,16 @@ const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-4">
-              <Button variant="primary">
+              <Button variant="primary" onClick={handleRunTestSuite}>
                 Run Full Test Suite
               </Button>
-              <Button variant="secondary">
+              <Button variant="secondary" onClick={handleViewLiveStream}>
                 View Live Stream
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={handleExportAuditReport}>
                 Export Audit Report
               </Button>
-              <Button variant="ghost">
+              <Button variant="ghost" onClick={handleSystemHealthCheck}>
                 System Health Check
               </Button>
             </div>

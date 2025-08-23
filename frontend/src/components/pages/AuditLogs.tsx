@@ -14,10 +14,12 @@ import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge, ComplianceBadge, RiskBadge } from '@/components/ui/Badge'
 import { formatters } from '@/utils'
+import { useConnection } from '@/utils/useConnection'
 
 const AuditLogs: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedComplianceType, setSelectedComplianceType] = useState('all')
+  const isConnected = useConnection()
   // const [dateRange] = useState('today')
 
   const mockAuditEvents = [
@@ -118,6 +120,22 @@ const AuditLogs: React.FC = () => {
           </Button>
         </div>
       </motion.div>
+
+      {/* Connection Status Warning */}
+      {!isConnected && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+            <span className="text-amber-800 dark:text-amber-200 font-medium">
+              Connection to backend API is unavailable. Some features may be limited.
+            </span>
+          </div>
+        </motion.div>
+      )}
 
       {/* Filters */}
       <motion.div

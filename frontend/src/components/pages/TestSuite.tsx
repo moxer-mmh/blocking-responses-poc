@@ -1,29 +1,30 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Play, RefreshCw, Download, Settings } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/Badge'
+import { useConnection } from '@/utils/useConnection'
+import { apiClient } from '@/utils/api'
 
 const TestSuite: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false)
-
-  const mockTestSuites = [
+  const [testSuites, setTestSuites] = useState<any[]>([
     {
       id: 'basic',
-      name: 'Basic Functionality',
+      name: 'Basic Functionality', 
       description: 'Core API endpoints and health checks',
       tests: 3,
-      status: 'completed' as const,
+      status: 'completed',
       passed: 3,
       failed: 0,
     },
     {
       id: 'patterns',
       name: 'Pattern Detection',
-      description: 'Regex pattern detection accuracy',
+      description: 'Regex pattern detection accuracy', 
       tests: 4,
-      status: 'completed' as const,
+      status: 'completed',
       passed: 4,
       failed: 0,
     },
@@ -32,7 +33,7 @@ const TestSuite: React.FC = () => {
       name: 'Presidio Integration',
       description: 'Microsoft Presidio ML detection',
       tests: 3,
-      status: 'running' as const,
+      status: 'running',
       passed: 2,
       failed: 0,
     },
@@ -41,16 +42,78 @@ const TestSuite: React.FC = () => {
       name: 'SSE Streaming',
       description: 'Server-Sent Events and validation',
       tests: 3,
-      status: 'pending' as const,
+      status: 'pending',
       passed: 0,
       failed: 0,
-    },
-  ]
+    }
+  ])
+  const [testOutput, setTestOutput] = useState<string>('')
+  const isConnected = useConnection()
 
-  const handleRunTests = () => {
+  // Load test suites on component mount
+  useEffect(() => {
+    loadTestSuites()
+  }, [isConnected])
+
+  const loadTestSuites = async () => {
+    if (!isConnected) return
+    
+    try {
+      const response = await apiClient.getAllTestSuites()
+      if (response.success && response.data) {
+        setTestSuites(response.data.suites || [])
+      }
+    } catch (error) {
+      console.error('Error loading test suites:', error)
+    }
+  }
+
+  const handleRunTests = async () => {
+    if (!isConnected) return
+    
     setIsRunning(true)
-    // Simulate test run
-    setTimeout(() => setIsRunning(false), 5000)
+    setTestOutput('🚀 Starting test suite execution...\n')
+    
+    try {
+      const response = await apiClient.runTestSuite(['basic', 'patterns'])
+      if (response.success && response.data) {
+        const data = response.data
+        setTestOutput(prev => prev + `✅ Test session started: ${data.session_id}\n`)
+        setTestOutput(prev => prev + `📊 Status: ${data.status}\n`)
+        
+        if (data.output) {
+          setTestOutput(prev => prev + `\n📝 Test Output:\n${data.output}\n`)
+        }
+        
+        // Reload test suites to update status
+        await loadTestSuites()
+      } else {
+        setTestOutput(prev => prev + `❌ Error: ${response.error}\n`)
+      }
+    } catch (error) {
+      setTestOutput(prev => prev + `💥 Exception: ${error}\n`)
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
+  const handleRunSingleSuite = async (suiteId: string) => {
+    if (!isConnected) return
+    
+    setTestOutput(`🔄 Running ${suiteId} suite...\n`)
+    
+    try {
+      const response = await apiClient.runTestSuite([suiteId])
+      if (response.success && response.data) {
+        const data = response.data
+        setTestOutput(prev => prev + `✅ ${suiteId} completed: ${data.status}\n`)
+        if (data.output) {
+          setTestOutput(prev => prev + data.output + '\n')
+        }
+      }
+    } catch (error) {
+      setTestOutput(prev => prev + `❌ ${suiteId} failed: ${error}\n`)
+    }
   }
 
   return (
@@ -86,6 +149,22 @@ const TestSuite: React.FC = () => {
         </div>
       </motion.div>
 
+      {/* Connection Status Warning */}
+      {!isConnected && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+            <span className="text-amber-800 dark:text-amber-200 font-medium">
+              Connection to backend API is unavailable. Some features may be limited.
+            </span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Test Suites Grid */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -93,7 +172,7 @@ const TestSuite: React.FC = () => {
         transition={{ delay: 0.2 }}
         className="grid grid-cols-1 md:grid-cols-2 gap-6"
       >
-        {mockTestSuites.map((suite, index) => (
+        {testSuites.map((suite: any, index: number) => (
           <motion.div
             key={suite.id}
             initial={{ opacity: 0, y: 20 }}
@@ -162,6 +241,7 @@ const TestSuite: React.FC = () => {
                       size="sm" 
                       className="flex-1"
                       disabled={isRunning}
+                      onClick={() => handleRunSingleSuite(suite.id)}
                     >
                       <Play className="w-3 h-3 mr-1" />
                       Run
@@ -189,31 +269,16 @@ const TestSuite: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-4 font-mono text-sm min-h-[300px] max-h-[400px] overflow-y-auto">
-              <div className="text-green-400">
-                ✓ TestBasicFunctionality::test_health_endpoint PASSED
-              </div>
-              <div className="text-green-400">
-                ✓ TestBasicFunctionality::test_metrics_endpoint PASSED  
-              </div>
-              <div className="text-green-400">
-                ✓ TestBasicFunctionality::test_config_endpoint PASSED
-              </div>
-              <div className="text-green-400">
-                ✓ TestPatternDetection::test_email_detection_regex PASSED
-              </div>
-              <div className="text-green-400">
-                ✓ TestPatternDetection::test_ssn_detection_regex PASSED
-              </div>
-              <div className="text-green-400">
-                ✓ TestPatternDetection::test_credit_card_detection PASSED
-              </div>
-              <div className="text-green-400">
-                ✓ TestPatternDetection::test_phone_detection PASSED
-              </div>
-              <div className="text-yellow-400">
-                → TestPresidioIntegration::test_email_detection_presidio RUNNING
-              </div>
-              {isRunning && (
+              {testOutput ? (
+                <pre className="text-green-400 whitespace-pre-wrap">
+                  {testOutput}
+                </pre>
+              ) : (
+                <div className="text-gray-500">
+                  Test output will appear here when tests are running...
+                </div>
+              )}
+              {isRunning && !testOutput && (
                 <div className="text-yellow-400 animate-pulse">
                   → Running compliance detection tests...
                 </div>

@@ -101,7 +101,16 @@ class ApiClient {
 
   // Testing endpoints
   async runTestSuite(suiteNames?: string[]) {
-    return this.request<{ session_id: string; status: string }>(
+    return this.request<{ 
+      session_id: string; 
+      status: string; 
+      output?: string;
+      summary?: {
+        passed: number;
+        failed: number;
+        total: number;
+      }
+    }>(
       '/test/run',
       {
         method: 'POST',
@@ -115,7 +124,17 @@ class ApiClient {
   }
 
   async getAllTestSuites() {
-    return this.request<TestSuite[]>('/test/suites')
+    return this.request<{
+      suites: Array<{
+        id: string;
+        name: string;
+        description: string;
+        tests: number;
+        status: string;
+        passed: number;
+        failed: number;
+      }>
+    }>('/test/suites')
   }
 
   // Audit endpoints
