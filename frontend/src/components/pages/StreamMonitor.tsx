@@ -76,8 +76,8 @@ const StreamMonitor: React.FC = () => {
     setRiskScores([])
     
     try {
-      // Note: In production, API key should be handled server-side
-      // For demo purposes only - API key should not be client-side
+      // Get API key from localStorage for demo purposes
+      const apiKey = localStorage.getItem('openai_api_key')
       
       const response = await fetch('http://localhost:8000/chat/stream', {
         method: 'POST',
@@ -89,7 +89,7 @@ const StreamMonitor: React.FC = () => {
           delay_tokens: 5,
           delay_ms: 100,
           risk_threshold: riskThreshold,
-          // Note: API key removed for security - handle server-side
+          api_key: apiKey, // Include API key from localStorage
         })
       })
 

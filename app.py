@@ -677,6 +677,22 @@ async def heartbeat_generator(queue: asyncio.Queue, interval: int = 15):
             break
 
 
+def get_valid_api_key(provided_api_key: Optional[str] = None) -> Optional[str]:
+    """Get a valid API key, prioritizing provided key over environment variable.
+    Returns None if environment variable is a placeholder."""
+    env_api_key = settings.openai_api_key
+    
+    # If a key is provided via parameter, use it
+    if provided_api_key:
+        return provided_api_key
+    
+    # If environment variable is set and not a placeholder, use it
+    if env_api_key and env_api_key != "your_openai_api_key_here":
+        return env_api_key
+    
+    # No valid API key available
+    return None
+
 
 # -------------------- LLM Streaming --------------------
 async def upstream_stream(
@@ -698,7 +714,7 @@ async def upstream_stream(
         model=model or settings.default_model,
         streaming=True,
         temperature=0.3,
-        api_key=SecretStr(api_key or settings.openai_api_key) if (api_key or settings.openai_api_key) else None,
+        api_key=SecretStr(get_valid_api_key(api_key)) if get_valid_api_key(api_key) else None,
     )
 
     chain = prompt | llm | StrOutputParser()
@@ -753,7 +769,7 @@ async def safe_rewrite_stream(
         model=settings.judge_model,
         streaming=True,
         temperature=settings.rewrite_temperature,
-        api_key=SecretStr(api_key or settings.openai_api_key) if (api_key or settings.openai_api_key) else None,
+        api_key=SecretStr(get_valid_api_key(api_key)) if get_valid_api_key(api_key) else None,
     )
 
     chain = prompt | llm | StrOutputParser()
@@ -931,10 +947,14 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
     """SSE endpoint with regulated industry compliance"""
 
     # Use API key from request if provided, otherwise fall back to environment variable
-    api_key = chat_req.api_key or settings.openai_api_key
+    # But check if the environment variable is a placeholder
+    api_key = get_valid_api_key(chat_req.api_key)
     
     if not api_key:
-        raise HTTPException(status_code=400, detail="OpenAI API key is required")
+        raise HTTPException(
+            status_code=400, 
+            detail="OpenAI API key is required. Please provide it in the request or set a valid key in the .env file"
+        )
 
     # Configuration
     delay_tokens = chat_req.delay_tokens or settings.delay_tokens

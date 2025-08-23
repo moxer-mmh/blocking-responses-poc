@@ -5,6 +5,8 @@ services:
     container_name: blocking-responses-api
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       # Required - set your OpenAI API key
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -14,7 +16,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DELAY_TOKENS=${DELAY_TOKENS:-20}
       - DELAY_MS=${DELAY_MS:-250}
-      - RISK_THRESHOLD=${RISK_THRESHOLD:-0.7}
+      - RISK_THRESHOLD=${RISK_THRESHOLD:-0.9}
       - JUDGE_THRESHOLD=${JUDGE_THRESHOLD:-0.8}
       - ENABLE_JUDGE=${ENABLE_JUDGE:-true}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:80}
