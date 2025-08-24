@@ -26,6 +26,29 @@ interface StreamEvent {
   patterns?: string[]
 }
 
+interface WindowAnalysis {
+  window_text: string
+  window_start: number
+  window_end: number
+  window_size: number
+  analysis_position: number
+  pattern_score: number
+  presidio_score: number
+  total_score: number
+  triggered_rules: string[]
+  presidio_entities: any[]
+  timestamp: string
+}
+
+interface AnalysisConfig {
+  analysis_window_size: number
+  analysis_overlap: number
+  analysis_frequency: number
+  risk_threshold: number
+  delay_tokens: number
+  delay_ms: number
+}
+
 const StreamMonitor: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false)
   const [message, setMessage] = useState('Tell me about patient John Doe with SSN 123-45-6789')
@@ -35,6 +58,20 @@ const StreamMonitor: React.FC = () => {
   const [sessionId, setSessionId] = useState('')
   const [riskScores, setRiskScores] = useState<number[]>([])
   const [riskThreshold, setRiskThreshold] = useState(0.7) // Default value
+  
+  // NEW: Window Analysis State
+  const [windowAnalyses, setWindowAnalyses] = useState<WindowAnalysis[]>([])
+  const [analysisConfig, setAnalysisConfig] = useState<AnalysisConfig>({
+    analysis_window_size: 150,
+    analysis_overlap: 50,
+    analysis_frequency: 25,
+    risk_threshold: 0.7,
+    delay_tokens: 24,
+    delay_ms: 250
+  })
+  // const [showWindowDetails, setShowWindowDetails] = useState(false)
+  const [selectedWindowIndex, setSelectedWindowIndex] = useState<number | null>(null)
+  
   const evtSourceRef = useRef<EventSource | null>(null)
   const isConnected = useConnection()
   const { success, error, warning, info } = useNotifications()
@@ -43,13 +80,30 @@ const StreamMonitor: React.FC = () => {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch('http://localhost:8000/config')
+        const response = await fetch('http://localhost:8000/compliance/analysis-config')
         if (response.ok) {
           const config = await response.json()
-          setRiskThreshold(config.risk_threshold)
+          setAnalysisConfig(config.current_config)
+          setRiskThreshold(config.current_config.risk_threshold)
         }
       } catch (err) {
-        console.error('Failed to fetch config:', err)
+        console.error('Failed to fetch analysis config:', err)
+        // Fallback to basic config endpoint
+        try {
+          const response = await fetch('http://localhost:8000/config')
+          if (response.ok) {
+            const config = await response.json()
+            setRiskThreshold(config.risk_threshold)
+            setAnalysisConfig(prev => ({
+              ...prev,
+              analysis_window_size: config.analysis_window_size || 150,
+              analysis_frequency: config.analysis_frequency || 25,
+              risk_threshold: config.risk_threshold
+            }))
+          }
+        } catch (fallbackErr) {
+          console.error('Failed to fetch basic config:', fallbackErr)
+        }
       }
     }
     fetchConfig()
@@ -74,6 +128,8 @@ const StreamMonitor: React.FC = () => {
     setEvents([])
     setCurrentResponse('')
     setRiskScores([])
+    setWindowAnalyses([])  // NEW: Reset window analyses
+    setSelectedWindowIndex(null)  // NEW: Reset selection
     
     try {
       // Get API key from localStorage for demo purposes
@@ -86,10 +142,13 @@ const StreamMonitor: React.FC = () => {
         },
         body: JSON.stringify({
           message,
-          delay_tokens: 5,
-          delay_ms: 100,
-          risk_threshold: riskThreshold,
-          api_key: apiKey, // Include API key from localStorage
+          delay_tokens: analysisConfig.delay_tokens,
+          delay_ms: analysisConfig.delay_ms,
+          risk_threshold: analysisConfig.risk_threshold,
+          // NEW: Include analysis configuration
+          analysis_window_size: analysisConfig.analysis_window_size,
+          analysis_frequency: analysisConfig.analysis_frequency,
+          api_key: apiKey,
         })
       })
 
@@ -139,6 +198,35 @@ const StreamMonitor: React.FC = () => {
                 setRiskScores(prev => [...prev, data.risk_score || 0])
               }
               
+              // NEW: Handle window analysis events
+              if (data.type === 'window_analysis') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                const analysisData = JSON.parse(data.content)
+                const windowAnalysis: WindowAnalysis = {
+                  ...analysisData,
+                  timestamp
+                }
+                setWindowAnalyses(prev => [...prev, windowAnalysis])
+                
+                // ADD WINDOW ANALYSIS SCORE TO RISK SCORES FOR REAL-TIME VISUALIZATION
+                setRiskScores(prev => [...prev, analysisData.total_score])
+                
+                // Also create an event for the timeline
+                setEvents(prev => [...prev, {
+                  id: prev.length + 1,
+                  type: 'window_analysis',
+                  timestamp,
+                  description: `Analyzed window of ${analysisData.window_size} tokens (pos: ${analysisData.analysis_position})`,
+                  risk: analysisData.total_score,
+                  entities: analysisData.presidio_entities?.map((e: any) => e.entity_type),
+                  patterns: analysisData.triggered_rules
+                }])
+                
+                if (analysisData.total_score >= 0.3) {
+                  info('Window Analysis', `Window ${windowAnalyses.length + 1}: Risk ${analysisData.total_score.toFixed(2)}`)
+                }
+              }
+              
               if (data.type === 'risk_alert') {
                 const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
                 setEvents(prev => [...prev, {
@@ -173,13 +261,34 @@ const StreamMonitor: React.FC = () => {
               if (data.type === 'completed') {
                 setSessionId(data.session_id)
                 const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                
+                // Parse completion data that may include analysis stats
+                let completionMessage = 'Stream completed successfully'
+                let analysisStats = null
+                
+                try {
+                  const completionData = JSON.parse(data.content)
+                  completionMessage = completionData.message || completionMessage
+                  analysisStats = completionData.analysis_stats
+                } catch (e) {
+                  // data.content is just a string message
+                  completionMessage = data.content || completionMessage
+                }
+                
                 setEvents(prev => [...prev, {
                   id: prev.length + 1,
                   type: 'completed',
                   timestamp,
-                  description: `Stream completed successfully`
+                  description: completionMessage
                 }])
-                success('Stream Completed', `Session ${data.session_id} finished successfully`)
+                
+                if (analysisStats) {
+                  success('Stream Completed', 
+                    `${analysisStats.efficiency_gained} - ${analysisStats.cost_reduction}`)
+                } else {
+                  success('Stream Completed', `Session ${data.session_id} finished successfully`)
+                }
+                
                 setIsStreaming(false)
                 break
               }
@@ -300,6 +409,122 @@ const StreamMonitor: React.FC = () => {
         </motion.div>
       )}
 
+      {/* NEW: Analysis Configuration Panel */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle size="sm">Analysis Configuration</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <label className="text-gray-600 dark:text-gray-400">Window Size</label>
+                <div className="font-mono font-bold">{analysisConfig.analysis_window_size} tokens</div>
+              </div>
+              <div>
+                <label className="text-gray-600 dark:text-gray-400">Analysis Frequency</label>
+                <div className="font-mono font-bold">Every {analysisConfig.analysis_frequency} tokens</div>
+              </div>
+              <div>
+                <label className="text-gray-600 dark:text-gray-400">Risk Threshold</label>
+                <div className="font-mono font-bold">{analysisConfig.risk_threshold}</div>
+              </div>
+              <div>
+                <label className="text-gray-600 dark:text-gray-400">Efficiency Gain</label>
+                <div className="font-mono font-bold text-green-600">{analysisConfig.analysis_frequency}x fewer calls</div>
+              </div>
+            </div>
+            
+            {windowAnalyses.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Analysis Windows</span>
+                  <Badge variant="info">{windowAnalyses.length} windows analyzed</Badge>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {windowAnalyses.map((analysis, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedWindowIndex(selectedWindowIndex === index ? null : index)}
+                      className={`
+                        px-2 py-1 text-xs rounded border font-mono
+                        ${selectedWindowIndex === index 
+                          ? 'bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-200'
+                          : analysis.total_score >= analysisConfig.risk_threshold
+                          ? 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900 dark:border-red-700 dark:text-red-200'
+                          : analysis.total_score >= 0.3
+                          ? 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900 dark:border-yellow-700 dark:text-yellow-200'
+                          : 'bg-green-100 border-green-300 text-green-800 dark:bg-green-900 dark:border-green-700 dark:text-green-200'
+                        }
+                        hover:opacity-75 transition-opacity
+                      `}
+                    >
+                      W{index + 1}: {analysis.total_score.toFixed(2)}
+                    </button>
+                  ))}
+                </div>
+                
+                {selectedWindowIndex !== null && windowAnalyses[selectedWindowIndex] && (
+                  <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="text-sm">
+                      <div className="font-medium mb-2">Window {selectedWindowIndex + 1} Analysis Details</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>Position: {windowAnalyses[selectedWindowIndex].analysis_position}</div>
+                        <div>Size: {windowAnalyses[selectedWindowIndex].window_size} tokens</div>
+                        <div>Pattern Score: {windowAnalyses[selectedWindowIndex].pattern_score.toFixed(3)}</div>
+                        <div>Presidio Score: {windowAnalyses[selectedWindowIndex].presidio_score.toFixed(3)}</div>
+                      </div>
+                      <div className="mt-2">
+                        <div className="font-medium text-xs mb-1">Analyzed Text:</div>
+                        <div className="font-mono text-xs bg-white dark:bg-gray-900 p-2 rounded border max-h-20 overflow-y-auto">
+                          {windowAnalyses[selectedWindowIndex].window_text}
+                        </div>
+                      </div>
+                      {windowAnalyses[selectedWindowIndex].triggered_rules.length > 0 && (
+                        <div className="mt-2">
+                          <div className="font-medium text-xs mb-1">Triggered Rules:</div>
+                          <div className="flex flex-wrap gap-1">
+                            {windowAnalyses[selectedWindowIndex].triggered_rules.map((rule, idx) => (
+                              <Badge key={idx} variant="warning" size="sm">{rule}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Compliance Architecture Explanation */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.05 }}
+      >
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+          <CardContent className="p-4">
+            <div className="text-sm">
+              <div className="font-medium text-blue-900 dark:text-blue-200 mb-2">
+                🎯 Compliance Architecture
+              </div>
+              <div className="text-blue-800 dark:text-blue-300 space-y-1">
+                <div>• <strong>Input Analysis:</strong> User input is analyzed for compliance risk using sliding windows</div>
+                <div>• <strong>Response Stream:</strong> AI output tokens are streamed after compliance approval</div>
+                <div>• <strong>Risk Scoring:</strong> Window analysis shows input risk; stream tokens show "Safe*" (pre-approved)</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
       {/* Message Input */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -345,7 +570,12 @@ const StreamMonitor: React.FC = () => {
           <Card>
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <CardTitle size="sm">Token Flow</CardTitle>
+                <div>
+                  <CardTitle size="sm">AI Response Stream</CardTitle>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Real-time AI token generation (post-compliance approval)
+                  </div>
+                </div>
                 <Badge variant={isStreaming ? "info" : "secondary"}>
                   {isStreaming ? "Streaming" : "Idle"}
                 </Badge>
@@ -396,7 +626,7 @@ const StreamMonitor: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
-                        <RiskBadge score={token.risk} />
+                        <RiskBadge score={token.risk} label={token.risk === null || token.risk === undefined ? "Safe*" : undefined} />
                         <span className="text-xs text-gray-500 dark:text-gray-400 font-mono hidden sm:inline">
                           {token.timestamp}
                         </span>
@@ -526,7 +756,7 @@ const StreamMonitor: React.FC = () => {
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-gray-600 dark:text-gray-400">Max:</span>
-                    <RiskBadge score={Math.max(...riskScores)} />
+                    <RiskBadge score={Math.max(...riskScores.filter(s => s !== null && s !== undefined))} />
                   </div>
                 </div>
               )}
@@ -550,15 +780,15 @@ const StreamMonitor: React.FC = () => {
                           stroke="currentColor"
                           strokeWidth="0.05"
                           className="text-blue-500"
-                          points={riskScores.map((score, index) => `${index},${2 - Math.min(score, 2)}`).join(' ')}
+                          points={riskScores.map((score, index) => `${index},${2 - Math.min(score || 0, 2)}`).join(' ')}
                         />
                         {riskScores.map((score, index) => (
                           <circle
                             key={index}
                             cx={index}
-                            cy={2 - Math.min(score, 2)}
+                            cy={2 - Math.min(score || 0, 2)}
                             r="0.03"
-                            className={score >= riskThreshold ? "fill-red-500" : score >= 0.7 ? "fill-orange-500" : "fill-blue-500"}
+                            className={(score || 0) >= riskThreshold ? "fill-red-500" : (score || 0) >= 0.7 ? "fill-orange-500" : "fill-blue-500"}
                           />
                         ))}
                       </svg>
@@ -582,7 +812,7 @@ const StreamMonitor: React.FC = () => {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-orange-600">
-                      {riskScores.filter(s => s >= 0.7).length}
+                      {riskScores.filter(s => (s || 0) >= 0.7).length}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">High Risk</div>
                   </div>

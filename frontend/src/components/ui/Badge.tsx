@@ -105,18 +105,22 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 }
 
 interface RiskBadgeProps {
-  score: number
+  score?: number | null
+  label?: string
   animate?: boolean
   className?: string
 }
 
 export const RiskBadge: React.FC<RiskBadgeProps> = ({
   score,
+  label,
   animate = false,
   className,
 }) => {
-  const getRiskConfig = (score: number) => {
-    if (score < 0.3) {
+  const getRiskConfig = (score?: number | null) => {
+    if (score === null || score === undefined) {
+      return { variant: 'secondary' as const, text: label || 'N/A' }
+    } else if (score < 0.3) {
       return { variant: 'success' as const, text: 'Low Risk' }
     } else if (score < 0.7) {
       return { variant: 'warning' as const, text: 'Medium Risk' }
