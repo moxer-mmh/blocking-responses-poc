@@ -91,9 +91,10 @@ class TestRiskAssessment:
         assert response.status_code == 200
         data = response.json()
         assert data["pattern_score"] > 0
-        # With Presidio integration, email gets blocked due to combined score (pattern + presidio > 1.0)
-        assert data["blocked"] is True
-        assert data["score"] > 1.0  # Combined pattern + presidio score
+        # With tuned sensitivity, email is detected but not blocked (score < 1.0)
+        assert data["blocked"] is False
+        assert data["score"] < 1.0  # Combined pattern + presidio score below threshold
+        assert data["score"] > 0.5  # But still detects the email
         assert len(data["triggered_rules"]) > 0
         assert len(data["presidio_entities"]) > 0
 

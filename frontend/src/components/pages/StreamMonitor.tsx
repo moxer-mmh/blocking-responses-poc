@@ -785,7 +785,8 @@ const StreamMonitor: React.FC = () => {
                                   >
                                     <Copy className="w-3 h-3" />
                                   </button>
-                                  {message.inputAnalysis && message.inputAnalysis.length > 0 && (
+                                  {((message.role === 'user' && message.inputAnalysis && message.inputAnalysis.length > 0) ||
+                                    (message.role === 'assistant' && message.responseWindows && message.responseWindows.length > 0)) && (
                                     <button
                                       onClick={() => setExpandedMessage(expandedMessage === message.id ? null : message.id)}
                                       className="p-1 rounded hover:bg-black hover:bg-opacity-10 transition-colors"
@@ -827,7 +828,10 @@ const StreamMonitor: React.FC = () => {
                         
                         {/* Window Analysis Details */}
                         <AnimatePresence>
-                          {expandedMessage === message.id && message.inputAnalysis && (
+                          {expandedMessage === message.id && (
+                            (message.role === 'user' && message.inputAnalysis) || 
+                            (message.role === 'assistant' && message.responseWindows)
+                          ) && (
                             <motion.div
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
@@ -835,10 +839,10 @@ const StreamMonitor: React.FC = () => {
                               className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600"
                             >
                               <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                Window Analysis: {message.inputAnalysis.length} windows analyzed
+                                Window Analysis: {(message.role === 'user' ? message.inputAnalysis : message.responseWindows)?.length || 0} windows analyzed
                               </div>
                               <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                {message.inputAnalysis.map((analysis, idx) => (
+                                {(message.role === 'user' ? message.inputAnalysis : message.responseWindows)?.map((analysis, idx) => (
                                   <div
                                     key={idx}
                                     className={`
