@@ -28,13 +28,7 @@ const navigation = [
     name: 'Stream Monitor',
     href: '/stream',
     icon: Activity,
-    description: 'Live stream analysis',
-  },
-  {
-    name: 'Stream (ChatGPT-style)',
-    href: '/stream-new',
-    icon: Activity,
-    description: 'New ChatGPT-style interface',
+    description: 'Chat stream analysis',
   },
   {
     name: 'Audit Logs',
