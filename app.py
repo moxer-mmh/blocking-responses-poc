@@ -1153,13 +1153,40 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                         else:
                             break
 
-            # Analyze and emit the calculated number of pieces
+            # CRITICAL FIX: Analyze the ENTIRE buffer including look-ahead window
+            # This ensures we catch sensitive content before ANY of it is shown
+            full_buffer_text = "".join(list(token_buffer))
+            
+            # Analyze the FULL buffer for compliance violations
+            if full_buffer_text:
+                buffer_compliance_result = pattern_detector.assess_compliance_risk(full_buffer_text, chat_req.region)
+                buffer_presidio_score, buffer_presidio_entities = presidio_detector.analyze_text(full_buffer_text)
+                buffer_total_score = buffer_compliance_result.score + buffer_presidio_score
+                
+                # If the FULL buffer contains violations, block immediately
+                if buffer_total_score >= risk_threshold:
+                    vetoed = True
+                    logger.warning(f"AI output blocked (buffer analysis) - Score: {buffer_total_score:.2f}, Content: {sanitize_for_logging(full_buffer_text)}")
+                    
+                    await emit_event(
+                        f"AI response blocked due to compliance violation (risk score: {buffer_total_score:.2f})",
+                        event="blocked",
+                        risk_score=buffer_total_score
+                    )
+                    
+                    # Update tracking with the violation details
+                    nonlocal max_ai_output_risk_score, all_ai_triggered_rules
+                    max_ai_output_risk_score = max(max_ai_output_risk_score, buffer_total_score)
+                    all_ai_triggered_rules.extend(buffer_compliance_result.triggered_rules)
+                    return
+            
+            # Only proceed with emission if buffer analysis passed
             pieces_to_analyze = []
             for _ in range(pieces_to_emit):
                 if token_buffer:
                     pieces_to_analyze.append(token_buffer.popleft())
             
-            # Analyze the collected pieces for compliance violations
+            # Double-check the pieces we're about to emit (redundant but safe)
             if pieces_to_analyze:
                 combined_text = "".join(pieces_to_analyze)
                 
@@ -1168,15 +1195,14 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                 ai_presidio_score, ai_presidio_entities = presidio_detector.analyze_text(combined_text)
                 ai_total_score = ai_compliance_result.score + ai_presidio_score
                 
-                # Update tracking
-                nonlocal max_ai_output_risk_score, all_ai_triggered_rules
+                # Update tracking (already declared nonlocal above)
                 max_ai_output_risk_score = max(max_ai_output_risk_score, ai_total_score)
                 all_ai_triggered_rules.extend(ai_compliance_result.triggered_rules)
                 
-                # Check if AI output violates compliance - BLOCK if it does
+                # Final check before emission
                 if ai_total_score >= risk_threshold:
                     vetoed = True
-                    logger.warning(f"AI output blocked - Score: {ai_total_score:.2f}, Content: {sanitize_for_logging(combined_text)}")
+                    logger.warning(f"AI output blocked (emission check) - Score: {ai_total_score:.2f}, Content: {sanitize_for_logging(combined_text)}")
                     
                     await emit_event(
                         f"AI response blocked due to compliance violation (risk score: {ai_total_score:.2f})",
