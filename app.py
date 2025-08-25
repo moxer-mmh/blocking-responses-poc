@@ -1128,7 +1128,12 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
 
         async def flush_tokens(force: bool = False):
             """Flush tokens from buffer while maintaining look-ahead window"""
-            nonlocal last_flush
+            nonlocal last_flush, vetoed
+            
+            # If already vetoed, don't process anymore
+            if vetoed:
+                return
+                
             if not token_buffer:
                 return
 
@@ -1158,16 +1163,17 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
             full_buffer_text = "".join(list(token_buffer))
             
             # Analyze the FULL buffer for compliance violations
-            if full_buffer_text:
+            if full_buffer_text and not vetoed:  # Check vetoed status before analysis
                 buffer_compliance_result = pattern_detector.assess_compliance_risk(full_buffer_text, chat_req.region)
                 buffer_presidio_score, buffer_presidio_entities = presidio_detector.analyze_text(full_buffer_text)
                 buffer_total_score = buffer_compliance_result.score + buffer_presidio_score
                 
-                # If the FULL buffer contains violations, block immediately
-                if buffer_total_score >= risk_threshold:
-                    vetoed = True
+                # If the FULL buffer contains violations, block immediately (ONLY ONCE)
+                if buffer_total_score >= risk_threshold and not vetoed:
+                    vetoed = True  # Set flag BEFORE emitting event
                     logger.warning(f"AI output blocked (buffer analysis) - Score: {buffer_total_score:.2f}, Content: {sanitize_for_logging(full_buffer_text)}")
                     
+                    # Emit blocking event ONLY ONCE
                     await emit_event(
                         f"AI response blocked due to compliance violation (risk score: {buffer_total_score:.2f})",
                         event="blocked",
@@ -1187,7 +1193,7 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                     pieces_to_analyze.append(token_buffer.popleft())
             
             # Double-check the pieces we're about to emit (redundant but safe)
-            if pieces_to_analyze:
+            if pieces_to_analyze and not vetoed:  # Check vetoed to avoid duplicate notifications
                 combined_text = "".join(pieces_to_analyze)
                 
                 # Analyze AI output for compliance violations
@@ -1199,11 +1205,12 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                 max_ai_output_risk_score = max(max_ai_output_risk_score, ai_total_score)
                 all_ai_triggered_rules.extend(ai_compliance_result.triggered_rules)
                 
-                # Final check before emission
-                if ai_total_score >= risk_threshold:
-                    vetoed = True
+                # Final check before emission (only if not already vetoed)
+                if ai_total_score >= risk_threshold and not vetoed:
+                    vetoed = True  # Set flag BEFORE emitting
                     logger.warning(f"AI output blocked (emission check) - Score: {ai_total_score:.2f}, Content: {sanitize_for_logging(combined_text)}")
                     
+                    # Emit blocking event ONLY ONCE
                     await emit_event(
                         f"AI response blocked due to compliance violation (risk score: {ai_total_score:.2f})",
                         event="blocked",
