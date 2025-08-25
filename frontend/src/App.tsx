@@ -8,6 +8,7 @@ import Layout from '@/components/Layout'
 import Dashboard from '@/components/pages/Dashboard'
 import TestSuite from '@/components/pages/TestSuite'
 import StreamMonitor from '@/components/pages/StreamMonitor'
+import StreamMonitorNew from '@/components/pages/StreamMonitorNew'
 import AuditLogs from '@/components/pages/AuditLogs'
 
 const App: React.FC = () => {
@@ -35,16 +36,21 @@ const App: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="min-h-screen bg-gray-50 dark:bg-gray-900"
+        className="h-screen bg-gray-50 dark:bg-gray-900"
       >
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/testing" element={<TestSuite />} />
-            <Route path="/stream" element={<StreamMonitor />} />
-            <Route path="/audit" element={<AuditLogs />} />
-          </Routes>
-        </Layout>
+        <Routes>
+          <Route path="/stream-new" element={<StreamMonitorNew />} />
+          <Route path="*" element={
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/testing" element={<TestSuite />} />
+                <Route path="/stream" element={<StreamMonitor />} />
+                <Route path="/audit" element={<AuditLogs />} />
+              </Routes>
+            </Layout>
+          } />
+        </Routes>
       </motion.div>
     </NotificationProvider>
   )

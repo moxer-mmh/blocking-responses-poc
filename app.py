@@ -1287,7 +1287,8 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                         "presidio_score": analysis_result["presidio_score"],
                         "total_score": analysis_result["total_score"],
                         "triggered_rules": analysis_result["triggered_rules"],
-                        "presidio_entities": analysis_result["presidio_entities"]
+                        "presidio_entities": analysis_result["presidio_entities"],
+                        "analysis_type": "input"
                     }),
                     event="window_analysis",
                     risk_score=analysis_result["total_score"]
@@ -1296,13 +1297,15 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                 # Emit risk alert for high scores (but not blocking level)
                 if analysis_result["total_score"] >= 0.3 and analysis_result["total_score"] < settings.risk_threshold:
                     await emit_event(
-                        f"Risk detected in window: {analysis_result['triggered_rules']}",
+                        f"Risk detected in input window: {analysis_result['triggered_rules']}",
                         event="risk_alert",
                         risk_score=analysis_result["total_score"]
                     )
 
-            # Initialize sliding window analyzer (kept for legacy compatibility)
+            # Initialize sliding window analyzer for response monitoring (display purposes)
             analyzer = SlidingWindowAnalyzer()
+            response_text = ""
+            response_window_count = 0
 
             try:
                 async for piece in upstream_stream(
@@ -1314,6 +1317,36 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                     # Add piece to buffer
                     token_buffer.append(piece)
                     window_text = (window_text + piece)[-8000:]  # Keep for display purposes
+                    response_text += piece
+
+                    # Create response windows for display (every ~25 tokens or window_size/6)
+                    response_tokens = token_count(response_text) if TIKTOKEN_AVAILABLE else len(response_text.split())
+                    window_threshold = max(25, settings.analysis_window_size // 6)
+                    
+                    if response_tokens > 0 and response_tokens % window_threshold == 0:
+                        response_window_count += 1
+                        # Emit response window info (not actual analysis, just for UI display)
+                        window_start = max(0, response_tokens - window_threshold)
+                        recent_response = response_text[-500:] if len(response_text) > 500 else response_text
+                        
+                        await emit_event(
+                            json.dumps({
+                                "window_text": recent_response,
+                                "window_start": window_start,
+                                "window_end": response_tokens,
+                                "window_size": min(window_threshold, response_tokens),
+                                "analysis_position": response_tokens,
+                                "pattern_score": 0.0,  # Response is pre-approved, so safe
+                                "presidio_score": 0.0,  # Response is pre-approved, so safe
+                                "total_score": 0.0,     # Response is pre-approved, so safe
+                                "triggered_rules": [],
+                                "presidio_entities": [],
+                                "analysis_type": "response",
+                                "window_number": response_window_count
+                            }),
+                            event="response_window",
+                            risk_score=0.0
+                        )
 
                     # Simple streaming with delay - no analysis needed (input was pre-analyzed)
                     await flush_tokens()
@@ -1323,8 +1356,9 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                 if not vetoed:
                     await flush_tokens(force=True)
                     
-                    # Calculate input analysis efficiency stats
+                    # Calculate analysis efficiency stats
                     input_tokens = len(enc.encode(chat_req.message)) if TIKTOKEN_AVAILABLE and enc else len(chat_req.message.split())
+                    response_tokens = token_count(response_text) if TIKTOKEN_AVAILABLE else len(response_text.split())
                     windows_analyzed = len(input_window_analyses)
                     efficiency_ratio = max(1, input_tokens / max(1, windows_analyzed))
                     
@@ -1333,11 +1367,14 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                             "message": "Stream completed successfully",
                             "input_analysis_stats": {
                                 "input_tokens": input_tokens,
+                                "response_tokens": response_tokens,
                                 "windows_analyzed": windows_analyzed,
+                                "response_windows_displayed": response_window_count,
                                 "efficiency_ratio": efficiency_ratio
                             },
                             "efficiency_gained": f"Analyzed {input_tokens} input tokens with only {windows_analyzed} analysis windows",
-                            "cost_reduction": f"{efficiency_ratio:.1f}x more efficient than token-by-token analysis"
+                            "cost_reduction": f"{efficiency_ratio:.1f}x more efficient than token-by-token analysis",
+                            "window_summary": f"Input: {windows_analyzed} analysis windows, Response: {response_window_count} display windows"
                         }),
                         event="completed",
                         risk_score=max_risk_score
@@ -1554,6 +1591,32 @@ async def get_compliance_patterns():
         "threshold": COMPLIANCE_POLICY["threshold"],
         "presidio_available": PRESIDIO_AVAILABLE,
         "tiktoken_available": TIKTOKEN_AVAILABLE,
+    }
+
+
+@app.get("/compliance/analysis-config")
+async def get_analysis_config():
+    """Get sliding window analysis configuration"""
+    return {
+        "current_config": {
+            "analysis_window_size": settings.analysis_window_size,
+            "analysis_overlap": settings.analysis_overlap,
+            "analysis_frequency": settings.analysis_frequency,
+            "risk_threshold": settings.risk_threshold,
+            "delay_tokens": settings.delay_tokens,
+            "delay_ms": settings.delay_ms,
+        },
+        "config_ranges": {
+            "analysis_window_size": {"min": 50, "max": 500, "default": 150},
+            "analysis_frequency": {"min": 5, "max": 100, "default": 25},
+            "risk_threshold": {"min": 0.1, "max": 1.0, "default": 0.7},
+        },
+        "efficiency_info": {
+            "traditional_approach": "Analyze every single token",
+            "new_approach_cost": f"1 analysis per {settings.analysis_frequency} tokens",
+            "efficiency_gain": f"{settings.analysis_frequency}x reduction in analysis calls",
+            "cost_savings": f"~{((settings.analysis_frequency - 1) / settings.analysis_frequency * 100):.1f}% cost reduction"
+        }
     }
 
 
