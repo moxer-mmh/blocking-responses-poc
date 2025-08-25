@@ -1,51 +1,34 @@
-# Blocking Responses API - Regulated Edition 🛡️
+# AI Stream Guard - Real-time Compliance for LLM Streaming
 
-![CI/CD Pipeline](https://github.com/adorosario/blocking-responses-poc/workflows/CI/CD%20Pipeline/badge.svg)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue)
-![Presidio](https://img.shields.io/badge/Presidio-PII%20Detection-orange)
+![Presidio](https://img.shields.io/badge/Presidio-ML%20Detection-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 
-A **regulated-ready** system for real-time compliance filtering in LLM streaming responses. Built for **HIPAA**, **PCI DSS**, **GDPR**, and **CCPA** compliance with industrial-grade PII/PHI detection using Microsoft Presidio and proper Server-Sent Events (SSE) architecture.
-
-> ⚠️ **Regulated Compliance Tool**: This is a defensive security mechanism designed for regulated industries. It prevents PII, PHI, and sensitive data from being exposed in LLM responses. Use in accordance with your compliance requirements.
+A production-ready system for governing AI streaming responses in real-time, preventing sensitive data leakage before it reaches users. Implements the **buffer-and-veto pattern** with sub-second latency for regulated industries (HIPAA, PCI DSS, GDPR, CCPA).
 
 ## 🎯 Key Features
 
-### 🏥 **Regulated Industry Ready**
-- **HIPAA Compliance**: PHI detection and safe handling for healthcare
-- **PCI DSS Ready**: Credit card and payment data protection
-- **GDPR Compliant**: EU privacy regulation compliance with audit logs
-- **CCPA Support**: California privacy law compliance features
+- **Real-time Stream Blocking**: Analyzes and blocks sensitive content in AI responses BEFORE users see it
+- **Buffer-and-Veto Pattern**: Maintains a 20-50 token look-ahead buffer with ~250ms micro-delay
+- **Multi-layer Detection**: 
+  - Fast regex patterns for PII/PHI/PCI
+  - Microsoft Presidio ML-based entity recognition
+  - Configurable risk scoring system
+- **Compliance Ready**: HIPAA, PCI DSS, GDPR, and CCPA support with regional variations
+- **Zero Leakage**: Full buffer analysis prevents ANY sensitive content from being displayed
+- **Production Ready**: Docker deployment, monitoring, audit logging, and health checks
 
-### 🔒 **Advanced Detection**
-- **Microsoft Presidio**: Industrial-grade PII/PHI entity recognition
-- **Multi-layer filtering**: Presidio + regex patterns + LLM judge
-- **Token-aware buffering**: Precise token counting with tiktoken
-- **Real-time compliance**: SSE streaming with compliance checks
-
-### 📋 **Audit & Compliance**
-- **Comprehensive logging**: Full audit trail for compliance reviews
-- **Session tracking**: Detailed request/response logging
-- **Metrics dashboard**: Real-time compliance statistics
-- **Safe rewrite**: Context-aware content sanitization
-
-### 🛠 **Production Features**
-- **Proper SSE**: Server-Sent Events with heartbeat and error handling  
-- **Docker deployment**: Full containerization with health checks
-- **Interactive demo**: Web interface for compliance testing
-- **Regional variations**: Configurable compliance types per region
-
-## 🚀 Quick Start (Docker)
+## 🚀 Quick Start
 
 ### Prerequisites
+- Python 3.11+
+- Docker & Docker Compose (for containerized deployment)
+- OpenAI API key (or compatible LLM provider)
 
-- Docker and Docker Compose
-- OpenAI API key
-- Minimum 4GB RAM (for Presidio models)
-- Python 3.11+ (for development)
+### Local Development
 
-### 1. Clone and Configure
+1. **Clone and setup environment:**
 
 ```bash
 git clone <your-repo>
