@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Sidebar from './Sidebar'
 import Header from './Header'
@@ -14,8 +15,12 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { updateMetrics, addHistoricalMetric, realtimeMetrics } = useDashboardStore()
   const connectionStatus = useConnection()
+  const location = useLocation()
   const prevMetricsRef = React.useRef(realtimeMetrics)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
+  
+  // Check if we're on the stream monitor page
+  const isStreamMonitor = location.pathname === '/stream'
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen)
@@ -92,25 +97,42 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [connectionStatus, updateMetrics])
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      {/* Sidebar */}
-      <Sidebar isOpen={isMobileMenuOpen} onClose={closeMobileMenu} />
+    <div className="h-screen bg-gradient-to-br from-gray-50 via-gray-50 to-gray-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950 flex overflow-hidden">
+      {/* Fixed Sidebar */}
+      <div className="flex-shrink-0">
+        <Sidebar isOpen={isMobileMenuOpen} onClose={closeMobileMenu} />
+      </div>
       
-      {/* Main Content */}
-      <div className="flex flex-col flex-1 lg:ml-0">
-        {/* Header */}
-        <Header onMobileMenuToggle={toggleMobileMenu} />
+      {/* Main Content Area - Fixed Height Layout */}
+      <div className="flex flex-col flex-1 min-w-0 h-screen">
+        {/* Fixed Header */}
+        <div className="flex-shrink-0">
+          <Header onMobileMenuToggle={toggleMobileMenu} />
+        </div>
         
-        {/* Page Content */}
-        <main className="flex-1 px-3 sm:px-6 p-3 sm:p-4 lg:p-6 overflow-auto">
+        {/* Scrollable Page Content */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-transparent">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ 
+              duration: 0.4,
+              type: "spring",
+              stiffness: 260,
+              damping: 20
+            }}
+            className={isStreamMonitor ? "h-full" : "h-full px-3 sm:px-6 py-4 sm:py-6 lg:py-8"}
           >
             {children}
           </motion.div>
         </main>
+      </div>
+
+      {/* Fixed Background decoration */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div className="absolute -top-40 -right-80 w-80 h-80 bg-gradient-to-br from-primary-400/20 to-success-400/20 rounded-full blur-3xl animate-float" />
+        <div className="absolute -bottom-40 -left-80 w-96 h-96 bg-gradient-to-br from-warning-400/20 to-danger-400/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/3 left-1/4 w-64 h-64 bg-gradient-to-br from-success-400/10 to-primary-400/10 rounded-full blur-2xl animate-float" style={{ animationDelay: '4s' }} />
       </div>
     </div>
   )

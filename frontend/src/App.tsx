@@ -37,18 +37,14 @@ const App: React.FC = () => {
         transition={{ duration: 0.5 }}
         className="h-screen bg-gray-50 dark:bg-gray-900"
       >
-        <Routes>
-          <Route path="/stream" element={<StreamMonitor />} />
-          <Route path="*" element={
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/testing" element={<TestSuite />} />
-                <Route path="/audit" element={<AuditLogs />} />
-              </Routes>
-            </Layout>
-          } />
-        </Routes>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/testing" element={<TestSuite />} />
+            <Route path="/stream" element={<StreamMonitor />} />
+            <Route path="/audit" element={<AuditLogs />} />
+          </Routes>
+        </Layout>
       </motion.div>
     </NotificationProvider>
   )

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Link } from 'react-router-dom'
 import { 
   Send, 
   Info, 
@@ -20,10 +19,7 @@ import {
   ChevronUp,
   Activity,
   Zap,
-  Target,
-  Home,
-  TestTube,
-  FileText
+  Target
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge, RiskBadge } from '@/components/ui/Badge'
@@ -119,6 +115,7 @@ const StreamMonitor: React.FC = () => {
   // UI State
   const [showComplianceInfo, setShowComplianceInfo] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'analyzing' | 'streaming' | 'complete'>('idle')
   const [expandedMessage, setExpandedMessage] = useState<string | null>(null)
   const [hoveredMessage, setHoveredMessage] = useState<string | null>(null)
@@ -549,69 +546,42 @@ const StreamMonitor: React.FC = () => {
   }
 
   return (
-    <div className={`flex h-screen max-h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden ${isStreaming ? 'select-none' : ''}`}>
-      {/* Mini Navigation Sidebar */}
-      <div className="flex-shrink-0 w-16 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-4 space-y-4">
-        <Link 
-          to="/"
-          className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center transition-colors"
-          title="Dashboard"
-        >
-          <Home className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-        </Link>
-        <Link 
-          to="/testing"
-          className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center transition-colors"
-          title="Testing Suite"
-        >
-          <TestTube className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-        </Link>
-        <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900 border-2 border-blue-500 flex items-center justify-center">
-          <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-        </div>
-        <Link 
-          to="/audit"
-          className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center transition-colors"
-          title="Audit Logs"
-        >
-          <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-        </Link>
-      </div>
-
+    <div className={`h-full bg-gray-50 dark:bg-gray-900 overflow-hidden ${isStreaming ? 'select-none' : ''} flex flex-col lg:flex-row`}>
       {/* Main Chat Column */}
-      <div className="flex-1 flex flex-col h-full max-h-full min-w-0 bg-white dark:bg-gray-800 relative">
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-white dark:bg-gray-800 relative order-1 lg:order-1">
         {/* Header with Real-Time Risk Scoring - FIXED TOP */}
-        <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 xs:px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
+            <div className="flex items-center space-x-2 xs:space-x-3">
+              <div className="w-7 h-7 xs:w-8 xs:h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <Shield className="w-4 h-4 xs:w-5 xs:h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Compliance AI Chat
+                <h1 className="text-sm xs:text-base sm:text-lg font-bold text-gray-900 dark:text-white">
+                  <span className="hidden xs:inline">Compliance AI Chat</span>
+                  <span className="xs:hidden">AI Chat</span>
                 </h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
                   Real-time compliance monitoring
                 </p>
               </div>
             </div>
             
             {/* MAIN ACTION - Real-Time Risk Scoring */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {isStreaming && (
                 <motion.div
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="flex items-center space-x-3 px-4 py-2 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl border border-blue-200 dark:border-blue-800"
+                  className="flex items-center space-x-2 xs:space-x-3 px-2 xs:px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl border border-blue-200 dark:border-blue-800"
                 >
-                  <div className="flex items-center space-x-2">
-                    <Target className="w-5 h-5 text-blue-600 animate-pulse" />
+                  <div className="flex items-center space-x-1 xs:space-x-2">
+                    <Target className="w-4 h-4 xs:w-5 xs:h-5 text-blue-600 animate-pulse" />
                     <div>
-                      <div className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        Risk Score: {currentRiskScore.toFixed(3)}
+                      <div className="text-xs xs:text-sm font-bold text-blue-900 dark:text-blue-100">
+                        <span className="hidden xs:inline">Risk Score: </span>{currentRiskScore.toFixed(3)}
                       </div>
-                      <div className="text-xs text-blue-600 dark:text-blue-400">
+                      <div className="text-xs text-blue-600 dark:text-blue-400 hidden sm:block">
                         {processingStatus === 'analyzing' ? 'Analyzing input...' : 
                          processingStatus === 'streaming' ? 'Monitoring response...' : 
                          'Processing...'}
@@ -625,18 +595,44 @@ const StreamMonitor: React.FC = () => {
               <Button 
                 variant="outline"
                 size="sm"
+                onClick={() => setShowSettings(!showSettings)}
+                icon={showSettings ? <ChevronDown className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
+                title={showSettings ? "Hide Settings" : "Show Settings"}
+                className={`transition-all duration-200 ${showSettings ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+              >
+                <span className="hidden sm:inline">{showSettings ? "Hide" : "Settings"}</span>
+              </Button>
+              
+              <Button 
+                variant="outline"
+                size="sm"
                 onClick={() => setShowComplianceInfo(!showComplianceInfo)}
                 icon={<Info className="w-4 h-4" />}
+                className="hidden sm:flex"
               >
-                How it Works
+                <span className="hidden md:inline">How it Works</span>
+                <span className="md:hidden">Info</span>
               </Button>
             </div>
           </div>
         </div>
 
+        {/* Mobile Debug Panel Toggle */}
+        <div className="lg:hidden flex-shrink-0 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 px-3 xs:px-4 py-2">
+          <Button 
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDebugPanel(!showDebugPanel)}
+            icon={<Activity className="w-4 h-4" />}
+            className={`w-full justify-center ${showDebugPanel ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300' : ''}`}
+          >
+            {showDebugPanel ? 'Hide Debug' : 'Show Debug'}
+          </Button>
+        </div>
+
         {/* Connection Status */}
         {!isConnected && (
-          <div className="flex-shrink-0 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-2">
+          <div className="flex-shrink-0 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-3 xs:px-4 py-2">
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
               <span className="text-amber-800 dark:text-amber-200 text-sm">
@@ -652,13 +648,12 @@ const StreamMonitor: React.FC = () => {
           ref={chatContainerRef}
           style={{ 
             scrollBehavior: 'smooth',
-            minHeight: 0,
-            maxHeight: '100%'
+            minHeight: 0
           }}
         >
-          <div className="px-4 py-6">
+          <div className="px-3 xs:px-4 sm:px-6 py-4 xs:py-6">
             {messages.length === 0 ? (
-              <div className="flex items-center justify-center min-h-full">
+              <div className="flex items-center justify-center min-h-96">
                 <motion.div
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -668,16 +663,16 @@ const StreamMonitor: React.FC = () => {
                   <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <MessageSquare className="w-8 h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  <h3 className="text-lg xs:text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white mb-2">
                     Start a Safe Conversation
                   </h3>
-                  <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                  <p className="text-sm xs:text-base text-gray-600 dark:text-gray-400 max-w-md mx-auto">
                     Send a message to begin. All responses are analyzed in real-time using sliding windows for compliance.
                   </p>
                 </motion.div>
               </div>
             ) : (
-              <div className="space-y-6 pb-4">
+              <div className="space-y-4 xs:space-y-6 pb-4">
                 {messages.map((message, index) => {
                   return (
                   <motion.div
@@ -689,9 +684,9 @@ const StreamMonitor: React.FC = () => {
                     onMouseEnter={() => setHoveredMessage(message.id)}
                     onMouseLeave={() => setHoveredMessage(null)}
                   >
-                    <div className={`max-w-3xl w-full ${message.role === 'user' ? 'ml-12' : 'mr-12'}`}>
+                    <div className={`max-w-3xl w-full ${message.role === 'user' ? 'ml-6 xs:ml-8 sm:ml-12' : 'mr-6 xs:mr-8 sm:mr-12'}`}>
                       <div className={`
-                        rounded-2xl p-4 shadow-sm relative group
+                        rounded-2xl p-3 xs:p-4 shadow-sm relative group
                         ${message.role === 'user' 
                           ? 'bg-blue-600 text-white ml-auto rounded-tr-md' 
                           : message.blocked 
@@ -700,7 +695,7 @@ const StreamMonitor: React.FC = () => {
                         }
                       `}>
                         {/* Message Header */}
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between mb-1 xs:mb-2">
                           <div className="flex items-center space-x-2">
                             <div className={`
                               w-6 h-6 rounded-full flex items-center justify-center
@@ -719,7 +714,7 @@ const StreamMonitor: React.FC = () => {
                                 <Bot className="w-4 h-4" />
                               )}
                             </div>
-                            <span className={`text-sm font-medium ${
+                            <span className={`text-xs xs:text-sm font-medium ${
                               message.role === 'user' 
                                 ? 'text-blue-100' 
                                 : message.blocked
@@ -734,7 +729,7 @@ const StreamMonitor: React.FC = () => {
                             {message.streaming && (
                               <div className="flex items-center space-x-1">
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                <span className="text-xs text-green-600 dark:text-green-400">Streaming</span>
+                                <span className="text-xs text-green-600 dark:text-green-400 hidden xs:inline">Streaming</span>
                               </div>
                             )}
                             {message.riskScore !== undefined && (
@@ -777,7 +772,7 @@ const StreamMonitor: React.FC = () => {
                         
                         {/* Message Content */}
                         <div className={`
-                          leading-relaxed
+                          text-sm xs:text-base leading-relaxed
                           ${message.role === 'user' 
                             ? 'text-white' 
                             : message.blocked
@@ -813,7 +808,7 @@ const StreamMonitor: React.FC = () => {
                               <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                                 Window Analysis: {message.inputAnalysis.length} windows analyzed
                               </div>
-                              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                 {message.inputAnalysis.map((analysis, idx) => (
                                   <div
                                     key={idx}
@@ -881,7 +876,7 @@ const StreamMonitor: React.FC = () => {
                     </Button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
+                <div className="grid grid-cols-1 xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 xs:gap-4 text-sm mb-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -975,7 +970,7 @@ const StreamMonitor: React.FC = () => {
                 </div>
                 
                 {/* Action buttons */}
-                <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-600">
+                <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between pt-3 border-t border-gray-200 dark:border-gray-600 gap-3 xs:gap-0">
                   <div className="flex items-center space-x-2">
                     <Button 
                       variant="primary" 
@@ -1001,6 +996,7 @@ const StreamMonitor: React.FC = () => {
                     size="sm" 
                     onClick={clearChat} 
                     disabled={isStreaming}
+                    className="w-full xs:w-auto"
                   >
                     Clear Chat
                   </Button>
@@ -1009,101 +1005,107 @@ const StreamMonitor: React.FC = () => {
             )}
           </AnimatePresence>
 
-          {/* Input Box */}
-          <div className="p-4">
-            <div className="flex items-end space-x-3">
-              <div className="flex-1 relative">
-                <div className="relative">
-                  <textarea
-                    value={currentMessage}
-                    onChange={(e) => setCurrentMessage(e.target.value)}
-                    placeholder="Message Compliance AI..."
-                    className={`w-full p-4 pr-20 border-2 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none max-h-32 transition-all duration-200 ${
-                      isStreaming 
-                        ? 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 cursor-not-allowed' 
-                        : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-                    }`}
-                    rows={1}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        if (currentMessage.trim() && !isStreaming) {
-                          handleSendMessage()
-                        }
-                      }
-                    }}
-                    disabled={isStreaming}
-                    style={{
-                      height: 'auto',
-                      minHeight: '56px'
-                    }}
-                    onInput={(e) => {
-                      const target = e.target as HTMLTextAreaElement
-                      target.style.height = 'auto'
-                      target.style.height = target.scrollHeight + 'px'
-                    }}
-                  />
-                  <div className="absolute bottom-3 right-3 flex items-center space-x-2">
-                    <span className={`text-xs ${
-                      currentMessage.length > 1000 
-                        ? 'text-orange-500' 
-                        : currentMessage.length > 500 
-                        ? 'text-yellow-500' 
-                        : 'text-gray-400 dark:text-gray-500'
-                    }`}>
-                      {currentMessage.length}
-                    </span>
-                    {currentMessage.trim() && !isStreaming && (
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <Button 
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSettings(!showSettings)}
-                icon={showSettings ? <ChevronDown className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
-                title={showSettings ? "Hide Settings" : "Show Settings"}
-                className={`px-3 py-2 transition-all duration-200 ${
-                  showSettings 
-                    ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300' 
-                    : 'hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                {showSettings ? "Hide" : "Config"}
-              </Button>
-              
-              {isStreaming ? (
-                <Button 
-                  variant="danger"
-                  onClick={handleStopStream}
-                  icon={<StopCircle className="w-5 h-5" />}
-                  className="px-6 py-4 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-                >
-                  Stop
-                </Button>
-              ) : (
-                <Button 
-                  variant="primary"
-                  disabled={!currentMessage.trim() || !isConnected}
-                  onClick={handleSendMessage}
-                  icon={<Send className="w-5 h-5" />}
-                  className={`px-6 py-4 rounded-xl font-semibold shadow-lg transition-all duration-200 ${
-                    currentMessage.trim() && isConnected 
-                      ? 'hover:shadow-xl transform hover:scale-105' 
-                      : 'opacity-50 cursor-not-allowed'
+          {/* Input Box - Modern Integrated Design */}
+          <div className="p-4 xs:p-4">
+            <div className="relative">
+              {/* Main Input Container */}
+              <div className="relative bg-white dark:bg-gray-700 rounded-2xl border-2 transition-all duration-200 shadow-sm hover:shadow-md focus-within:shadow-lg focus-within:ring-4 focus-within:ring-blue-500/10">
+                <textarea
+                  value={currentMessage}
+                  onChange={(e) => setCurrentMessage(e.target.value)}
+                  placeholder="Message Compliance AI..."
+                  className={`w-full p-4 pr-20 bg-transparent text-gray-900 dark:text-white resize-none max-h-32 rounded-2xl border-0 outline-none placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200 text-base sm:text-sm ${
+                    isStreaming 
+                      ? 'cursor-not-allowed' 
+                      : ''
                   }`}
-                >
-                  Send
-                </Button>
-              )}
+                  rows={1}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (currentMessage.trim() && !isStreaming) {
+                        handleSendMessage()
+                      }
+                    }
+                  }}
+                  disabled={isStreaming}
+                  style={{
+                    height: 'auto',
+                    minHeight: '56px'
+                  }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement
+                    target.style.height = 'auto'
+                    target.style.height = Math.min(target.scrollHeight, 128) + 'px'
+                  }}
+                />
+                
+                {/* Character Counter - Top Right */}
+                <div className="absolute top-3 right-16 flex items-center space-x-2">
+                  <span className={`text-xs font-medium transition-colors duration-200 ${
+                    currentMessage.length > 1000 
+                      ? 'text-red-500' 
+                      : currentMessage.length > 500 
+                      ? 'text-amber-500' 
+                      : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {currentMessage.length}
+                  </span>
+                  {currentMessage.trim() && !isStreaming && (
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  )}
+                </div>
+                
+                {/* Integrated Action Button - Bottom Right */}
+                <div className="absolute bottom-3 right-3 flex items-center">
+                  {isStreaming ? (
+                    <button
+                      onClick={handleStopStream}
+                      className="group flex items-center justify-center w-10 h-10 bg-red-500 hover:bg-red-600 rounded-full shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-red-500/30"
+                      title="Stop streaming"
+                    >
+                      <StopCircle className="w-5 h-5 text-white" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={!currentMessage.trim() || !isConnected}
+                      className={`group flex items-center justify-center w-10 h-10 rounded-full shadow-md transition-all duration-200 focus:outline-none focus:ring-4 ${
+                        currentMessage.trim() && isConnected
+                          ? 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg transform hover:scale-105 focus:ring-blue-500/30 cursor-pointer'
+                          : 'bg-gray-300 dark:bg-gray-600 cursor-not-allowed opacity-60'
+                      }`}
+                      title={
+                        !currentMessage.trim() 
+                          ? "Enter a message to send" 
+                          : !isConnected 
+                          ? "Connection unavailable" 
+                          : "Send message (Enter)"
+                      }
+                    >
+                      <Send className={`w-5 h-5 transition-all duration-200 ${
+                        currentMessage.trim() && isConnected 
+                          ? 'text-white transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5' 
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`} />
+                    </button>
+                  )}
+                </div>
+                
+                {/* Input Border States */}
+                <div className={`absolute inset-0 rounded-2xl border-2 pointer-events-none transition-all duration-200 ${
+                  isStreaming 
+                    ? 'border-amber-200 dark:border-amber-800 bg-amber-50/20 dark:bg-amber-900/20' 
+                    : currentMessage.trim()
+                    ? 'border-blue-300 dark:border-blue-600'
+                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}></div>
+              </div>
             </div>
             
             {/* Quick Status */}
-            <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-              <div className="flex items-center space-x-4">
+            <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 flex-wrap gap-2">
+              <div className="flex items-center space-x-2 xs:space-x-4">
                 {isStreaming && (
                   <div className="flex items-center space-x-1">
                     <RefreshCw className="w-3 h-3 animate-spin" />
@@ -1115,38 +1117,61 @@ const StreamMonitor: React.FC = () => {
                   <span>Compliance active</span>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <span>Windows: {analysisConfig.analysis_window_size} tokens</span>
+              <div className="flex items-center space-x-2 text-xs">
+                <span className="hidden xs:inline">Windows: {analysisConfig.analysis_window_size} tokens</span>
+                <span className="xs:hidden">{analysisConfig.analysis_window_size}t</span>
                 <span>•</span>
-                <span>Frequency: {analysisConfig.analysis_frequency}</span>
+                <span className="hidden xs:inline">Frequency: {analysisConfig.analysis_frequency}</span>
+                <span className="xs:hidden">{analysisConfig.analysis_frequency}x</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Right Debug Column */}
-      <div className="w-80 bg-gray-50 dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 flex flex-col h-full max-h-full">
-        <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <h3 className="font-bold text-gray-900 dark:text-white flex items-center space-x-2">
-            <Activity className="w-5 h-5 text-purple-600" />
-            <span>Debug Console</span>
-          </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Real-time analysis details
-          </p>
+      {/* Debug Panel - Desktop Sidebar / Mobile Overlay */}
+      <div className={`
+        ${showDebugPanel ? 'block' : 'hidden lg:block'}
+        lg:w-80 lg:flex-shrink-0
+        fixed lg:relative inset-0 lg:inset-auto 
+        z-40 lg:z-auto
+        bg-gray-50 dark:bg-gray-900 
+        border-l border-gray-200 dark:border-gray-700 
+        flex flex-col h-full
+        lg:order-2 order-2
+        ${showDebugPanel ? 'lg:shadow-none shadow-2xl' : ''}
+      `}>
+        <div className="flex-shrink-0 p-3 xs:p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-sm xs:text-base text-gray-900 dark:text-white flex items-center space-x-2">
+                <Activity className="w-4 h-4 xs:w-5 xs:h-5 text-purple-600" />
+                <span>Debug Console</span>
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Real-time analysis details
+              </p>
+            </div>
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDebugPanel(false)}
+              className="lg:hidden"
+              icon={<ChevronUp className="w-4 h-4" />}
+            />
+          </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-3 xs:p-4 space-y-3 xs:space-y-4">
           {/* Decision Timeline */}
           <div>
-            <h4 className="font-semibold text-sm text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
-              <Clock className="w-4 h-4 text-blue-600" />
+            <h4 className="font-semibold text-xs xs:text-sm text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
+              <Clock className="w-3 h-3 xs:w-4 xs:h-4 text-blue-600" />
               <span>Decision Timeline</span>
               <Badge variant="secondary" size="sm">{events.length}</Badge>
             </h4>
             
-            <div className="space-y-2 max-h-48 overflow-y-auto">{events.length > 0 ? (
+            <div className="space-y-2 max-h-32 xs:max-h-48 overflow-y-auto">{events.length > 0 ? (
                 events.slice().reverse().map((event) => (
                   <motion.div
                     key={event.id}
@@ -1195,13 +1220,13 @@ const StreamMonitor: React.FC = () => {
 
           {/* AI Response Stream */}
           <div>
-            <h4 className="font-semibold text-sm text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
-              <Zap className="w-4 h-4 text-green-600" />
+            <h4 className="font-semibold text-xs xs:text-sm text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
+              <Zap className="w-3 h-3 xs:w-4 xs:h-4 text-green-600" />
               <span>Response Stream</span>
               <Badge variant="success" size="sm">{tokens.length} tokens</Badge>
             </h4>
             
-            <div className="space-y-1 max-h-48 overflow-y-auto">
+            <div className="space-y-1 max-h-32 xs:max-h-48 overflow-y-auto">
               {tokens.length > 0 ? (
                 tokens.slice(-20).map((token, index) => (
                   <motion.div
@@ -1234,8 +1259,8 @@ const StreamMonitor: React.FC = () => {
           
           {/* Live Statistics */}
           <div>
-            <h4 className="font-semibold text-sm text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
-              <BarChart3 className="w-4 h-4 text-purple-600" />
+            <h4 className="font-semibold text-xs xs:text-sm text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
+              <BarChart3 className="w-3 h-3 xs:w-4 xs:h-4 text-purple-600" />
               <span>Live Statistics</span>
             </h4>
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1287,6 +1312,14 @@ const StreamMonitor: React.FC = () => {
         </div>
       </div>
 
+      {/* Debug Panel Mobile Overlay Background */}
+      {showDebugPanel && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+          onClick={() => setShowDebugPanel(false)}
+        />
+      )}
+
       {/* Compliance Info Modal */}
       <AnimatePresence>
         {showComplianceInfo && (
@@ -1301,12 +1334,12 @@ const StreamMonitor: React.FC = () => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto mx-3 xs:mx-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-6">
+              <div className="p-4 xs:p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
+                  <h3 className="text-lg xs:text-xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
                     <Shield className="w-6 h-6 text-blue-600" />
                     <span>How Sliding Window Analysis Works</span>
                   </h3>
@@ -1315,7 +1348,7 @@ const StreamMonitor: React.FC = () => {
                   </Button>
                 </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-3 xs:space-y-4">
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                     <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">Input Analysis</h4>
                     <p className="text-sm text-blue-800 dark:text-blue-300">
