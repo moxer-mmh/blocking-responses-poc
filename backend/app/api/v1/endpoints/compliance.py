@@ -192,3 +192,27 @@ async def get_analysis_config():
             "context_improvement": f"{settings.analysis_window_size} token context vs single token"
         }
     }
+
+
+# Backward compatibility endpoint for frontend
+@router.get("/audit-logs")
+async def get_compliance_audit_logs_compat(
+    limit: int = Query(50, description="Maximum number of logs to return"),
+    offset: int = Query(0, description="Number of logs to skip"),
+    compliance_type: Optional[str] = Query(None, description="Filter by compliance type"),
+    blocked_only: Optional[bool] = Query(None, description="Show only blocked content"),
+    start_date: Optional[str] = Query(None, description="Start date filter (ISO format)"),
+    end_date: Optional[str] = Query(None, description="End date filter (ISO format)")
+):
+    """Backward compatibility endpoint - redirects to audit router."""
+    # Import here to avoid circular imports
+    from app.api.v1.endpoints.audit import get_compliance_audit_logs
+    
+    return await get_compliance_audit_logs(
+        limit=limit,
+        offset=offset,
+        compliance_type=compliance_type,
+        blocked_only=blocked_only,
+        start_date=start_date,
+        end_date=end_date
+    )

@@ -1,31 +1,43 @@
-"""Compliance and pattern detection services."""
+"""Compliance and pattern detection services - migrated from app.py."""
 
 import re
 import hashlib
+import secrets
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from app.core.config import settings
 from app.schemas.requests import ComplianceResult
 
 
-# Compliance policy configuration
+# -------------------- Compliance Policy Configuration --------------------
 COMPLIANCE_POLICY: Dict[str, Any] = {
+    "threshold": 0.7,  # Will be updated to settings.risk_threshold after initialization
     "weights": {
+        # PII (Personally Identifiable Information)
         "email": 0.4,
         "phone": 0.5,
         "ssn": 1.2,
-        "dob": 0.6,
-        "address": 0.3,
+        "dob": 0.5,
+        "address": 0.5,
+        "name": 0.3,
+        
+        # Financial/PCI (Payment Card Industry)
         "credit_card": 1.5,
         "iban": 1.0,
         "routing_number": 0.8,
         "bank_account": 1.0,
+        
+        # Medical/PHI (Protected Health Information)
         "medical_record": 1.0,
         "diagnosis": 0.7,
         "medication": 0.6,
+        
+        # Security credentials
         "password": 1.5,
         "api_key": 1.8,
         "secret": 1.5,
+        
+        # Contextual indicators
         "phi_hint": 0.2,
         "pci_hint": 0.2,
     },
@@ -49,24 +61,24 @@ COMPLIANCE_POLICY: Dict[str, Any] = {
         },
         "CCPA": {
             "email": 0.5,
-            "phone": 0.6,
+            "phone": 0.5,
             "address": 0.4,
-        },
+        }
     },
-    "threshold": 0.7,
     "phi_terms": [
-        "patient", "medical", "diagnosis", "prescription", "doctor", "clinic", 
-        "hospital", "healthcare", "treatment", "medication", "symptoms"
+        "patient", "medical", "health", "diagnosis", "treatment", "symptom",
+        "prescription", "medication", "therapy", "surgery", "hospital",
+        "doctor", "physician", "nurse", "clinic", "insurance"
     ],
     "pci_terms": [
-        "payment", "transaction", "billing", "invoice", "purchase", "checkout",
-        "credit", "debit", "merchant", "pos", "terminal"
-    ],
+        "card", "payment", "transaction", "billing", "purchase", "charge",
+        "merchant", "bank", "account", "financial", "money", "payment"
+    ]
 }
 
 
 class RegulatedPatternDetector:
-    """Enhanced pattern detection for regulated industries."""
+    """Enhanced pattern detection for regulated industries (exact copy from app.py)."""
     
     def __init__(self):
         # Enhanced patterns for regulated industries
@@ -117,7 +129,7 @@ class RegulatedPatternDetector:
         }
 
     def luhn_check(self, card_number: str) -> bool:
-        """Luhn algorithm for credit card validation."""
+        """Luhn algorithm for credit card validation"""
         digits = [int(d) for d in re.sub(r"[^\d]", "", card_number)]
         if len(digits) < 13 or len(digits) > 19:
             return False
@@ -137,7 +149,7 @@ class RegulatedPatternDetector:
     def assess_compliance_risk(
         self, text: str, region: Optional[str] = None
     ) -> ComplianceResult:
-        """Comprehensive compliance risk assessment."""
+        """Comprehensive compliance risk assessment"""
         weights = COMPLIANCE_POLICY["weights"].copy()
 
         # Apply regional weight adjustments
@@ -167,10 +179,10 @@ class RegulatedPatternDetector:
 
         # Create hash of sensitive snippet if needed
         snippet_hash = None
-        if score > 0:
+        if settings.hash_sensitive_data and score > 0:
             snippet_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
 
-        blocked = score >= settings.risk_threshold
+        blocked = score >= COMPLIANCE_POLICY["threshold"]
 
         return ComplianceResult(
             score=score,
@@ -180,3 +192,21 @@ class RegulatedPatternDetector:
             compliance_region=region,
             timestamp=datetime.utcnow(),
         )
+
+
+# -------------------- Utility Functions --------------------
+def generate_session_id() -> str:
+    """Generate cryptographically secure session ID"""
+    return secrets.token_hex(6)  # 12 character hex string
+
+
+def sanitize_for_logging(text: str, max_length: int = 50) -> str:
+    """Sanitize text for safe logging without exposing PII"""
+    if not text:
+        return ""
+    # Truncate and mask potential sensitive data
+    truncated = text[:max_length]
+    # Replace potential SSN, credit card patterns with asterisks for logging
+    sanitized = re.sub(r'\b\d{3}-?\d{2}-?\d{4}\b', '***-**-****', truncated)
+    sanitized = re.sub(r'\b(?:\d[ -]*?){13,19}\b', '**** **** **** ****', sanitized)
+    return sanitized

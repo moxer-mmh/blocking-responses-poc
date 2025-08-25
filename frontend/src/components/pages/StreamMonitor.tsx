@@ -14,6 +14,7 @@ interface StreamToken {
   blocked?: boolean
   entities?: string[]
   patterns?: string[]
+  safe_rewrite?: boolean
 }
 
 interface StreamEvent {
@@ -80,7 +81,7 @@ const StreamMonitor: React.FC = () => {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch('http://localhost:8000/compliance/analysis-config')
+        const response = await fetch('/api/compliance/analysis-config')
         if (response.ok) {
           const config = await response.json()
           setAnalysisConfig(config.current_config)
@@ -90,7 +91,7 @@ const StreamMonitor: React.FC = () => {
         console.error('Failed to fetch analysis config:', err)
         // Fallback to basic config endpoint
         try {
-          const response = await fetch('http://localhost:8000/config')
+          const response = await fetch('/api/config')
           if (response.ok) {
             const config = await response.json()
             setRiskThreshold(config.risk_threshold)
@@ -132,10 +133,7 @@ const StreamMonitor: React.FC = () => {
     setSelectedWindowIndex(null)  // NEW: Reset selection
     
     try {
-      // Get API key from localStorage for demo purposes
-      const apiKey = localStorage.getItem('openai_api_key')
-      
-      const response = await fetch('http://localhost:8000/chat/stream', {
+      const response = await fetch('/api/v1/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,7 +146,6 @@ const StreamMonitor: React.FC = () => {
           // NEW: Include analysis configuration
           analysis_window_size: analysisConfig.analysis_window_size,
           analysis_frequency: analysisConfig.analysis_frequency,
-          api_key: apiKey,
         })
       })
 
@@ -185,7 +182,7 @@ const StreamMonitor: React.FC = () => {
             try {
               const data = JSON.parse(dataContent)
               
-              if (data.type === 'chunk') {
+              if (data.type === 'chunk' || data.type === 'message') {
                 const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
                 setTokens(prev => [...prev, {
                   text: data.content,
@@ -250,12 +247,64 @@ const StreamMonitor: React.FC = () => {
                   id: prev.length + 1,
                   type: 'blocked',
                   timestamp,
-                  description: `Stream blocked: ${data.reason}`,
+                  description: `Stream blocked: ${data.content}`,
                   risk: data.risk_score
                 }])
-                error('Stream Blocked', data.reason || 'Content violated compliance policies')
+                error('Stream Blocked', data.content || 'Content violated compliance policies')
                 setIsStreaming(false)
                 break
+              }
+              
+              if (data.type === 'compliance_warning') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                setEvents(prev => [...prev, {
+                  id: prev.length + 1,
+                  type: 'compliance_warning',
+                  timestamp,
+                  description: `Compliance warning: High risk response detected (${data.risk_score?.toFixed(2)})`,
+                  risk: data.risk_score
+                }])
+                warning('Compliance Warning', `Response risk score: ${data.risk_score?.toFixed(2)}`)
+              }
+              
+              if (data.type === 'safe_rewrite') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                setTokens(prev => [...prev, {
+                  text: data.content,
+                  risk: 0, // Safe rewrite has low risk
+                  timestamp,
+                  entities: [],
+                  patterns: [],
+                  safe_rewrite: true
+                }])
+                setCurrentResponse(prev => prev + data.content)
+                setEvents(prev => [...prev, {
+                  id: prev.length + 1,
+                  type: 'safe_rewrite',
+                  timestamp,
+                  description: 'Providing safe, compliant rewrite'
+                }])
+                info('Safe Rewrite', 'Generating compliant response')
+              }
+              
+              if (data.type === 'analysis') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                if (data.window_analyses && Array.isArray(data.window_analyses)) {
+                  // Add all window analyses to state
+                  setWindowAnalyses(prev => [...prev, ...data.window_analyses.map((analysis: any) => ({
+                    ...analysis,
+                    timestamp
+                  }))])
+                  
+                  setEvents(prev => [...prev, {
+                    id: prev.length + 1,
+                    type: 'analysis',
+                    timestamp,
+                    description: `Received ${data.window_analyses.length} input analysis result(s)`
+                  }])
+                  
+                  info('Input Analysis', `Processed ${data.window_analyses.length} analysis windows`)
+                }
               }
               
               if (data.type === 'completed') {
@@ -294,7 +343,7 @@ const StreamMonitor: React.FC = () => {
               }
               
             } catch (e) {
-              console.warn('Failed to parse SSE data:', line)
+              console.warn('Failed to parse SSE data:', line, 'Error:', e instanceof Error ? e.message : e)
             }
           }
         }

@@ -79,11 +79,8 @@ make start
 ### 4. Test the System
 
 ```bash
-# Using the included test client
-docker-compose exec api python example_client.py
-
-# Or test directly with curl
-curl -X POST "http://localhost:8000/chat/stream" \
+# Test directly with curl
+curl -X POST "http://localhost:8000/api/v1/chat/stream" \
      -H "Content-Type: application/json" \
      -d '{"message": "What is the weather today?"}'
 ```
@@ -246,7 +243,7 @@ docker-compose up -d
 docker-compose logs -f api
 
 # Run tests
-docker-compose run --rm api pytest test_app.py -v
+docker-compose run --rm backend pytest backend/tests/ -v
 
 # Stop services
 docker-compose down
@@ -501,13 +498,10 @@ async def test_blocking():
                     else:
                         print(data, end='')
 
-# Run inside API container
-docker-compose exec api python -c "
-import asyncio
-from example_client import BlockingResponsesClient
-client = BlockingResponsesClient()
-asyncio.run(client.stream_chat('Hello world'))
-"
+# Test using curl directly
+curl -X POST "http://localhost:8000/api/v1/chat/stream" \
+     -H "Content-Type: application/json" \
+     -d '{"message": "Hello world"}'
 ```
 
 ### cURL Examples

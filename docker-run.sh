@@ -123,7 +123,7 @@ start_prod() {
 run_tests() {
     echo -e "${GREEN}Running test suite in container${NC}"
     $DOCKER_COMPOSE build api
-    $DOCKER_COMPOSE run --rm api pytest test_app.py -v
+    $DOCKER_COMPOSE run --rm backend pytest backend/tests/ -v
 }
 
 show_logs() {

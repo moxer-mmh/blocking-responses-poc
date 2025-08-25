@@ -33,27 +33,27 @@ build: .env
 	docker-compose build
 
 # Force rebuild
-rebuild: .env
+rebuild:
 	docker-compose build --no-cache
 
 # Start basic services
-start: .env
-	docker-compose up -d api web
+start:
+	docker-compose up -d backend frontend
 	@echo "Services starting at:"
 	@echo "  Web Interface: http://localhost"
 	@echo "  API: http://localhost:8000"
 
 # Development mode (with logs)
-dev: .env
-	docker-compose up api web
+dev:
+	docker-compose up backend frontend
 
 # Production mode
-prod: .env
-	docker-compose up -d api web
+prod:
+	docker-compose up -d backend frontend
 	@make health
 
 # Start with monitoring
-monitoring: .env
+monitoring:
 	docker-compose --profile monitoring up -d
 	@echo "Services available at:"
 	@echo "  Web Interface: http://localhost"
@@ -62,14 +62,14 @@ monitoring: .env
 	@echo "  Grafana: http://localhost:3000"
 
 # Run tests
-test: .env
-	docker-compose build api
-	docker-compose run --rm api pytest test_app.py -v
+test:
+	docker-compose build backend
+	docker-compose run --rm backend pytest tests/ -v
 
 # Run tests with coverage
-test-coverage: .env
-	docker-compose build api
-	docker-compose run --rm api pytest test_app.py --cov=app --cov-report=html
+test-coverage:
+	docker-compose build backend
+	docker-compose run --rm backend pytest tests/ --cov=app --cov-report=html
 
 # Show logs
 logs:
@@ -89,9 +89,9 @@ clean-all:
 	docker-compose --profile monitoring --profile redis down -v --remove-orphans --rmi all
 	docker system prune -af --volumes
 
-# Open shell in API container
+# Open shell in backend container
 shell:
-	docker-compose exec api /bin/bash
+	docker-compose exec backend /bin/bash
 
 # Check health
 health:
@@ -116,33 +116,4 @@ backup:
 	@echo "Backing up Prometheus data..."
 	docker run --rm -v blocking-responses-poc_prometheus_data:/data -v $(PWD)/backups:/backup alpine tar czf /backup/prometheus-$(shell date +%Y%m%d-%H%M%S).tar.gz -C /data .
 
-# Quick demo
-demo: start
-	@echo "Waiting for services to start..."
-	@sleep 5
-	@echo "Running demo client..."
-	docker-compose exec api python example_client.py
-
-# Performance test
-perf-test:
-	@echo "Running performance test..."
-	docker-compose exec api python -c "
-import asyncio
-import time
-from example_client import BlockingResponsesClient
-
-async def perf_test():
-    client = BlockingResponsesClient()
-    start = time.time()
-    tasks = []
-    for i in range(10):
-        tasks.append(client.stream_chat(f'Test message {i}'))
-    
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    end = time.time()
-    
-    print(f'Completed 10 concurrent requests in {end-start:.2f}s')
-    print(f'Average: {(end-start)/10:.2f}s per request')
-
-asyncio.run(perf_test())
-"
+.PHONY: help build start dev prod monitoring test test-coverage logs stop clean health shell rebuild backup

@@ -13,7 +13,7 @@ api_router.include_router(compliance.router, prefix="/compliance", tags=["compli
 api_router.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
 api_router.include_router(config.router, prefix="/config", tags=["config"])
 api_router.include_router(testing.router, prefix="/test", tags=["testing"])
-api_router.include_router(audit.router, prefix="/audit-logs", tags=["audit"])
+api_router.include_router(audit.router, prefix="/audit", tags=["audit"])
 
 # Add some root level endpoints for backward compatibility
 @api_router.get("/")

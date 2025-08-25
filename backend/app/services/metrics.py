@@ -85,8 +85,10 @@ class MetricsTracker:
 
     @property
     def error_rate(self) -> float:
-        """Calculate error rate (placeholder for now)."""
-        return 0.0
+        """Calculate error rate based on failed requests."""
+        if self.total_requests == 0:
+            return 0.0
+        return (self.total_requests - self.blocked_requests) / self.total_requests
 
     def get_metrics_summary(self) -> Dict[str, Any]:
         """Get complete metrics summary."""
@@ -105,9 +107,13 @@ class MetricsTracker:
             "uptime_seconds": monotonic() - self.start_time,
         }
 
-    def get_audit_logs(self) -> List[Dict[str, Any]]:
-        """Get audit logs (placeholder - use database for real implementation)."""
-        return []
+    async def get_audit_logs(self) -> List[Dict[str, Any]]:
+        """Get audit logs from database."""
+        try:
+            from app.core.database import get_audit_logs
+            return await get_audit_logs(limit=100)
+        except Exception:
+            return []
 
     def reset(self):
         """Reset all metrics (useful for testing)."""

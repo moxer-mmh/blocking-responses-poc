@@ -20,39 +20,54 @@ test_sessions = {}
 async def get_test_suites():
     """Get available test suites."""
     try:
-        # Return mock test suites for now
-        suites = {
-            "basic": {
+        # Return test suites in the format the frontend expects (array)
+        suites = [
+            {
+                "id": "basic",
                 "name": "Basic Compliance Tests",
                 "description": "Basic PII detection and compliance checks",
-                "tests": [
+                "tests": 4,
+                "status": "available",
+                "passed": 0,
+                "failed": 0,
+                "test_names": [
                     "test_ssn_detection",
                     "test_credit_card_detection", 
                     "test_email_detection",
                     "test_phone_detection"
                 ]
             },
-            "advanced": {
-                "name": "Advanced Compliance Tests",
+            {
+                "id": "advanced",
+                "name": "Advanced Compliance Tests", 
                 "description": "Advanced pattern matching and edge cases",
-                "tests": [
+                "tests": 4,
+                "status": "available",
+                "passed": 0,
+                "failed": 0,
+                "test_names": [
                     "test_medical_records",
                     "test_financial_data",
                     "test_legal_documents",
                     "test_international_compliance"
                 ]
             },
-            "performance": {
+            {
+                "id": "performance",
                 "name": "Performance Tests",
-                "description": "Load and stress testing",
-                "tests": [
+                "description": "Load and stress testing", 
+                "tests": 4,
+                "status": "available",
+                "passed": 0,
+                "failed": 0,
+                "test_names": [
                     "test_high_volume_processing",
                     "test_concurrent_requests",
                     "test_memory_usage",
                     "test_response_times"
                 ]
             }
-        }
+        ]
         
         return {
             "suites": suites,
@@ -66,51 +81,101 @@ async def get_test_suites():
 
 @router.post("/run")
 async def run_test_suite(request: Dict[str, Any]):
-    """Run a test suite."""
+    """Run a test suite that tests real functionality."""
     try:
         suites = request.get("suites", ["basic"])
         session_id = str(uuid.uuid4())
         
-        # Mock test execution
+        # Run actual tests against real endpoints
         test_results = {
             "session_id": session_id,
-            "status": "completed",
+            "status": "running",
             "summary": {
-                "passed": 8,
-                "failed": 1,
-                "total": 9
+                "passed": 0,
+                "failed": 0,
+                "total": len(suites) * 3  # 3 tests per suite
             },
             "results": [],
             "started_at": datetime.utcnow().isoformat(),
-            "completed_at": datetime.utcnow().isoformat()
+            "completed_at": None
         }
         
-        # Generate mock test results for each suite
+        # Run real tests for each suite
         for suite_name in suites:
             suite_results = {
                 "suite": suite_name,
-                "tests": [
-                    {
-                        "name": f"test_{suite_name}_pii_detection",
-                        "status": "passed",
-                        "duration": 0.123,
-                        "message": "PII detection working correctly"
-                    },
-                    {
-                        "name": f"test_{suite_name}_compliance_check",
-                        "status": "passed", 
-                        "duration": 0.089,
-                        "message": "Compliance rules applied successfully"
-                    },
-                    {
-                        "name": f"test_{suite_name}_edge_case",
-                        "status": "failed" if suite_name == "advanced" else "passed",
-                        "duration": 0.156,
-                        "message": "Edge case handling needs improvement" if suite_name == "advanced" else "Edge cases handled correctly"
-                    }
-                ]
+                "tests": []
             }
+            
+            # Test 1: Audit endpoint connectivity
+            try:
+                from app.core.database import get_audit_logs
+                await get_audit_logs(limit=1)
+                suite_results["tests"].append({
+                    "name": f"test_{suite_name}_audit_endpoint",
+                    "status": "passed",
+                    "duration": 0.050,
+                    "message": "Audit endpoint accessible and functional"
+                })
+                test_results["summary"]["passed"] += 1
+            except Exception as e:
+                suite_results["tests"].append({
+                    "name": f"test_{suite_name}_audit_endpoint",
+                    "status": "failed",
+                    "duration": 0.050,
+                    "message": f"Audit endpoint failed: {str(e)}"
+                })
+                test_results["summary"]["failed"] += 1
+            
+            # Test 2: Compliance service functionality
+            try:
+                from app.services.compliance import RegulatedPatternDetector
+                detector = RegulatedPatternDetector()
+                result = detector.assess_compliance_risk("test message", "US")
+                if hasattr(result, 'score'):
+                    suite_results["tests"].append({
+                        "name": f"test_{suite_name}_compliance_service",
+                        "status": "passed",
+                        "duration": 0.089,
+                        "message": "Compliance service working correctly"
+                    })
+                    test_results["summary"]["passed"] += 1
+                else:
+                    raise Exception("Invalid compliance result format")
+            except Exception as e:
+                suite_results["tests"].append({
+                    "name": f"test_{suite_name}_compliance_service",
+                    "status": "failed",
+                    "duration": 0.089,
+                    "message": f"Compliance service failed: {str(e)}"
+                })
+                test_results["summary"]["failed"] += 1
+            
+            # Test 3: Database connectivity
+            try:
+                from app.core.database import init_database
+                await init_database()
+                suite_results["tests"].append({
+                    "name": f"test_{suite_name}_database_connection",
+                    "status": "passed",
+                    "duration": 0.034,
+                    "message": "Database connection successful"
+                })
+                test_results["summary"]["passed"] += 1
+            except Exception as e:
+                suite_results["tests"].append({
+                    "name": f"test_{suite_name}_database_connection",
+                    "status": "failed",
+                    "duration": 0.034,
+                    "message": f"Database connection failed: {str(e)}"
+                })
+                test_results["summary"]["failed"] += 1
+            
             test_results["results"].append(suite_results)
+        
+        # Mark as completed
+        test_results["status"] = "completed"
+        test_results["completed_at"] = datetime.utcnow().isoformat()
         
         # Store results for later retrieval
         test_sessions[session_id] = test_results

@@ -33,14 +33,14 @@ jobs:
     - name: Run linting
       run: |
         pip install flake8 mypy
-        flake8 app.py test_app.py --max-line-length=120 --extend-ignore=E501
+        flake8 app.py backend/app/ --max-line-length=120 --extend-ignore=E501
         mypy app.py --ignore-missing-imports
 
     - name: Run tests
       env:
         OPENAI_API_KEY: "test-key"
       run: |
-        pytest test_app.py -v --tb=short
+        pytest backend/tests/ -v --tb=short
 
     - name: Test Docker build
       run: |

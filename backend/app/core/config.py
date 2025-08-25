@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Database settings
     database_url: str = "sqlite+aiosqlite:///./compliance_audit.db"
     
+    # Security and privacy settings
+    hash_sensitive_data: bool = True
+    
     # CORS settings
     cors_origins: str = "*"
     

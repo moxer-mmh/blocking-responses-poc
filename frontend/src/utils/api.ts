@@ -1,7 +1,7 @@
 import { ApiResponse, ComplianceResult, TestSuite, MetricsSummary, ComplianceConfig, CompliancePattern, AuditEvent } from '@/types'
 
-// Use the new restructured backend on port 8001
-const API_BASE_URL = 'http://localhost:8001/api/v1'
+// Use nginx proxy - all API calls go through the frontend proxy to backend
+const API_BASE_URL = '/api/v1'
 
 class ApiClient {
   private async request<T>(
@@ -51,9 +51,41 @@ class ApiClient {
   }
 
   // Health and system endpoints
-  async getHealth() {
-    // Health endpoint is still at root level
-    return this.request<{ status: string; version: string; dependencies: any }>('/../health')
+  async getHealth(): Promise<ApiResponse<{ 
+    status: string; 
+    timestamp: string; 
+    version?: string;
+    dependencies?: any;
+    compliance_features?: any;
+    note?: string;
+  }>> {
+    // Use nginx proxy for health checks too
+    const healthUrl = '/api/health'
+    try {
+      const response = await fetch(healthUrl, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      return {
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      }
+    } catch (error) {
+      console.error('Health check failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      }
+    }
   }
 
   async getMetrics() {
@@ -145,7 +177,7 @@ class ApiClient {
       logs: AuditEvent[]
       count: number
       total_available: number
-    }>(`/audit-logs?limit=${limit}`)
+    }>(`/audit?limit=${limit}`)
   }
 
   // Compliance audit logs with filters
@@ -168,7 +200,7 @@ class ApiClient {
       logs: AuditEvent[]
       count: number
       total_available: number
-    }>(`/audit-logs?${params}`)
+    }>(`/audit?${params}`)
   }
 
   // Chat streaming

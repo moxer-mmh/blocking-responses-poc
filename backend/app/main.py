@@ -6,6 +6,11 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Rate limiting imports
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # Basic configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
@@ -23,6 +28,11 @@ app = FastAPI(
     description="Production-ready SSE proxy with PII/PHI/PCI compliance for regulated industries",
     version="1.1.0",
 )
+
+# Rate limiting setup (same as original)
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 def get_cors_origins():
@@ -47,9 +57,10 @@ from app.api.v1.api import api_router
 app.include_router(api_router, prefix="/api/v1")
 
 # Add legacy endpoints for backward compatibility
-from app.api.v1.endpoints import compliance, metrics, config, testing, audit
+from app.api.v1.endpoints import compliance, metrics, config, testing, audit, chat
 
 # Root level endpoints (backward compatibility)
+app.include_router(chat.router, prefix="/chat", tags=["chat-legacy"])  # Add root-level chat
 app.include_router(compliance.router, prefix="/compliance", tags=["compliance-legacy"])
 app.include_router(metrics.router, prefix="/metrics", tags=["metrics-legacy"])  
 app.include_router(config.router, prefix="/config", tags=["config-legacy"])
@@ -69,6 +80,24 @@ async def legacy_assess_risk():
 async def startup_event():
     """Initialize services on startup."""
     logger.info("Starting Blocking Responses API (Restructured)...")
+    
+    # Initialize shared services (same as original app.py)
+    try:
+        from app.core.services import initialize_services
+        initialize_services()
+        logger.info("Shared services initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize shared services: {e}")
+        raise
+    
+    # Initialize database
+    try:
+        from app.core.database import init_database
+        await init_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
 
 
 @app.on_event("shutdown")

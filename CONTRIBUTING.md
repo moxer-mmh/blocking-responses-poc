@@ -87,12 +87,13 @@ Enhancement suggestions are welcome! Please:
 # Install development dependencies
 pip install flake8 mypy black isort
 
+```bash
 # Format code
-black app.py test_app.py
-isort app.py test_app.py
+black app.py backend/app/
+isort app.py backend/app/
 
-# Check style
-flake8 app.py test_app.py --max-line-length=120
+# Lint code 
+flake8 app.py backend/app/ --max-line-length=120
 mypy app.py --ignore-missing-imports
 ```
 
@@ -108,15 +109,15 @@ mypy app.py --ignore-missing-imports
 #### Running Tests
 
 ```bash
-# Run all tests
-pytest test_app.py -v
+# Run tests
+pytest backend/tests/ -v
 
 # Run specific test categories
-pytest test_app.py::TestRiskPatterns -v
-pytest test_app.py::TestAPI -v
+pytest backend/tests/unit/ -v
+pytest backend/tests/integration/ -v
 
-# Run with coverage
-pytest test_app.py --cov=app --cov-report=html
+# Generate test coverage report
+pytest backend/tests/ --cov=backend/app --cov-report=html
 ```
 
 #### Writing Tests
