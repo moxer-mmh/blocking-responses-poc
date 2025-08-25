@@ -24,7 +24,7 @@ curl http://localhost:8000/health
 
 ## Access Points
 - **API**: http://localhost:8000
-- **Dashboard**: http://localhost
+- **Dashboard**: http://localhost:3000
 - **API Docs**: http://localhost:8000/docs
 
 ## Test the System

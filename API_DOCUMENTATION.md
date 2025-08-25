@@ -5,6 +5,7 @@
 The Blocking Responses API provides real-time compliance filtering for AI applications, with support for PII/PHI detection, streaming responses, and comprehensive audit logging.
 
 **Base URL**: `http://localhost:8000`
+**Web Interface**: `http://localhost:3000`
 
 **Content-Type**: `application/json`
 

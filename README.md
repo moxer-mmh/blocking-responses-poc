@@ -71,7 +71,7 @@ make start
 
 ### 3. Access Your Services
 
-- **Web Interface**: http://localhost
+- **Web Interface**: http://localhost:3000
 - **API Direct**: http://localhost:8000  
 - **API Documentation**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/health
@@ -103,7 +103,7 @@ docker-compose --profile monitoring up -d
 
 # Access monitoring at:
 # Prometheus: http://localhost:9090
-# Grafana: http://localhost:3000 (admin/admin123)
+# Grafana: http://localhost:3001 (admin/admin123)
 ```
 
 ### Development Mode
@@ -457,7 +457,7 @@ All containers include comprehensive health checks:
 docker-compose --profile monitoring up -d
 
 # Access dashboards
-open http://localhost:3000  # Grafana (admin/admin123)
+open http://localhost:3001  # Grafana (admin/admin123)
 open http://localhost:9090  # Prometheus
 ```
 
@@ -751,7 +751,7 @@ cp .env.example .env  # Add your OpenAI API key
 ./docker-run.sh basic
 
 # Access services
-open http://localhost              # Web interface  
+open http://localhost:3000         # Web interface  
 open http://localhost:8000/docs    # API docs
 curl http://localhost:8000/health  # Health check
 
