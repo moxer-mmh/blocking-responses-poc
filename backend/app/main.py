@@ -47,12 +47,22 @@ from app.api.v1.api import api_router
 app.include_router(api_router, prefix="/api/v1")
 
 # Add legacy endpoints for backward compatibility
-from app.api.v1.endpoints import compliance, metrics, config
+from app.api.v1.endpoints import compliance, metrics, config, testing, audit
 
 # Root level endpoints (backward compatibility)
 app.include_router(compliance.router, prefix="/compliance", tags=["compliance-legacy"])
 app.include_router(metrics.router, prefix="/metrics", tags=["metrics-legacy"])  
 app.include_router(config.router, prefix="/config", tags=["config-legacy"])
+app.include_router(testing.router, prefix="/test", tags=["testing-legacy"])
+app.include_router(audit.router, prefix="/audit-logs", tags=["audit-legacy"])
+
+# Add specific legacy endpoints that were at root level
+@app.get("/assess-risk")
+async def legacy_assess_risk():
+    """Legacy endpoint redirect."""
+    from fastapi import Request
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/v1/compliance/assess-risk")
 
 
 @app.on_event("startup")

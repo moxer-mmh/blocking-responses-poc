@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.services.metrics import MetricsTracker
 from app.core.config import settings
 
@@ -120,3 +120,37 @@ async def get_system_health():
         "metrics_summary": summary,
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@router.post("/snapshot")
+async def create_metrics_snapshot():
+    """Create a snapshot of current metrics."""
+    try:
+        from datetime import datetime
+        import uuid
+        
+        # Get current metrics
+        current_metrics = metrics.get_metrics_summary()
+        
+        # Create snapshot
+        snapshot = {
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.utcnow().isoformat(),
+            "metrics": current_metrics,
+            "metadata": {
+                "version": settings.version,
+                "uptime_seconds": current_metrics.get("uptime_seconds", 0),
+                "created_by": "system"
+            }
+        }
+        
+        # In a real implementation, this would be saved to a database
+        # For now, just return the snapshot
+        return {
+            "snapshot": snapshot,
+            "message": "Metrics snapshot created successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to create metrics snapshot: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create snapshot: {str(e)}")

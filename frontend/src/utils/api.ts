@@ -1,6 +1,7 @@
 import { ApiResponse, ComplianceResult, TestSuite, MetricsSummary, ComplianceConfig, CompliancePattern, AuditEvent } from '@/types'
 
-const API_BASE_URL = '/api'
+// Use the new restructured backend on port 8001
+const API_BASE_URL = 'http://localhost:8001/api/v1'
 
 class ApiClient {
   private async request<T>(
@@ -51,15 +52,16 @@ class ApiClient {
 
   // Health and system endpoints
   async getHealth() {
-    return this.request<{ status: string; version: string; dependencies: any }>('/health')
+    // Health endpoint is still at root level
+    return this.request<{ status: string; version: string; dependencies: any }>('/../health')
   }
 
   async getMetrics() {
-    return this.request<MetricsSummary>('/metrics')
+    return this.request<MetricsSummary>('/metrics/')
   }
 
   async getConfig() {
-    return this.request<ComplianceConfig>('/config')
+    return this.request<ComplianceConfig>('/config/')
   }
 
   // Compliance endpoints
@@ -74,7 +76,7 @@ class ApiClient {
     if (options.threshold !== undefined) {
       params.append('threshold', options.threshold.toString())
     }
-    return this.request<ComplianceResult>(`/assess-risk?${params}`)
+    return this.request<ComplianceResult>(`/compliance/assess-risk?${params}`)
   }
 
   async getCompliancePatterns() {
@@ -169,12 +171,11 @@ class ApiClient {
     }>(`/audit-logs?${params}`)
   }
 
-  // Streaming endpoints
-  async startStream(data: {
-    message: string
+  // Chat streaming
+  async startChatStream(data: {
+    messages: any[]
     model?: string
-    compliance_type?: string
-    threshold?: number
+    stream?: boolean
     api_key?: string
   }) {
     return this.request<{ session_id: string; stream_url: string }>(
