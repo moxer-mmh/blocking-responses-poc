@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     
     # Compliance thresholds
     risk_threshold: float = 0.7  # Fixed default to match env file
-    presidio_confidence_threshold: float = 0.6
+    presidio_confidence_threshold: float = 0.85  # Increased to reduce false positives
     judge_threshold: float = 0.8
     enable_judge: bool = True
 
@@ -263,7 +263,7 @@ COMPLIANCE_POLICY: Dict[str, Any] = {
         "api_key": 0.6,  # Reduced from 0.8
         "secret": 0.5,
         # Presidio base weight
-        "presidio": 0.6,  # Reduced from 0.9 to allow legitimate examples
+        "presidio": 0.3,  # Reduced further to minimize false positives
     },
     # HIPAA/PHI contextual terms that increase risk when present
     "phi_terms": [
@@ -463,12 +463,20 @@ class MetricsTracker:
         self.pattern_detections = {}
         self.presidio_detections = {}
         self.start_time = monotonic()
+        
+        # New tracking for input and response windows
+        self.input_windows_analyzed = 0
+        self.response_windows_analyzed = 0
+        self.max_risk_score = 0.0
 
     def record_request(self, blocked=False, delay_ms=0, risk_score=0.0):
         """Record a request with its metrics"""
         self.total_requests += 1
         if blocked:
             self.blocked_requests += 1
+
+        # Update max risk score
+        self.max_risk_score = max(self.max_risk_score, risk_score)
 
         # Keep last 1000 risk scores for averaging
         self.risk_scores.append(risk_score)
@@ -479,6 +487,14 @@ class MetricsTracker:
         self.delay_times.append(delay_ms)
         if len(self.delay_times) > 1000:
             self.delay_times.pop(0)
+
+    def record_input_window(self):
+        """Record an input analysis window"""
+        self.input_windows_analyzed += 1
+
+    def record_response_window(self):
+        """Record a response analysis window"""
+        self.response_windows_analyzed += 1
 
     def record_pattern_detection(self, pattern_name):
         """Record a pattern detection"""
@@ -1089,6 +1105,9 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
     )
     user_total_score = user_compliance_result.score + user_presidio_score
     
+    # Record input window analysis (user input is always analyzed as 1 window)
+    metrics.record_input_window()
+    
     # Log user input for audit (informational only - never block)
     logger.info(f"User input analysis (audit only) - Score: {user_total_score:.2f}, Rules: {user_compliance_result.triggered_rules}")
 
@@ -1125,6 +1144,26 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                 "risk_score": risk_score
             }
             await queue.put(sse_event(json.dumps(event_data), event=event, id=str(event_id_val)))
+
+        # Emit input window analysis event
+        await emit_event(
+            json.dumps({
+                "window_text": chat_req.message,
+                "window_start": 0,
+                "window_end": token_count(chat_req.message),
+                "window_size": token_count(chat_req.message),
+                "analysis_position": 0,
+                "pattern_score": user_compliance_result.score,
+                "presidio_score": user_presidio_score,
+                "total_score": user_total_score,
+                "triggered_rules": user_compliance_result.triggered_rules,
+                "presidio_entities": user_presidio_entities,
+                "analysis_type": "input",
+                "window_number": 1
+            }),
+            event="input_window",
+            risk_score=user_total_score
+        )
 
         async def flush_tokens(force: bool = False):
             """Flush tokens from buffer while maintaining look-ahead window"""
@@ -1184,6 +1223,32 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                     nonlocal max_ai_output_risk_score, all_ai_triggered_rules
                     max_ai_output_risk_score = max(max_ai_output_risk_score, buffer_total_score)
                     all_ai_triggered_rules.extend(buffer_compliance_result.triggered_rules)
+                    
+                    # Record metrics for blocked request
+                    elapsed_ms = (monotonic() - start_time) * 1000
+                    metrics.record_request(
+                        blocked=True, delay_ms=elapsed_ms, risk_score=buffer_total_score
+                    )
+                    
+                    # Record pattern detections for metrics
+                    for rule in buffer_compliance_result.triggered_rules:
+                        pattern_name = rule.split(":")[0].strip()
+                        metrics.record_pattern_detection(pattern_name)
+                    
+                    # Create audit event for blocked stream
+                    audit_event = AuditEvent(
+                        event_type="stream_blocked",
+                        user_input_hash=user_input_hash,
+                        blocked_content_hash=hashlib.sha256(full_buffer_text.encode()).hexdigest()[:16],
+                        risk_score=buffer_total_score,
+                        triggered_rules=buffer_compliance_result.triggered_rules,
+                        timestamp=datetime.utcnow(),
+                        session_id=session_id,
+                    )
+                    await log_audit_event(
+                        audit_event, processing_time_ms=elapsed_ms, presidio_entities=buffer_presidio_entities
+                    )
+                    
                     return
             
             # Only proceed with emission if buffer analysis passed
@@ -1216,6 +1281,32 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                         event="blocked",
                         risk_score=ai_total_score
                     )
+                    
+                    # Record metrics for blocked request
+                    elapsed_ms = (monotonic() - start_time) * 1000
+                    metrics.record_request(
+                        blocked=True, delay_ms=elapsed_ms, risk_score=ai_total_score
+                    )
+                    
+                    # Record pattern detections for metrics
+                    for rule in ai_compliance_result.triggered_rules:
+                        pattern_name = rule.split(":")[0].strip()
+                        metrics.record_pattern_detection(pattern_name)
+                    
+                    # Create audit event for blocked stream
+                    audit_event = AuditEvent(
+                        event_type="stream_blocked",
+                        user_input_hash=user_input_hash,
+                        blocked_content_hash=hashlib.sha256(combined_text.encode()).hexdigest()[:16],
+                        risk_score=ai_total_score,
+                        triggered_rules=ai_compliance_result.triggered_rules,
+                        timestamp=datetime.utcnow(),
+                        session_id=session_id,
+                    )
+                    await log_audit_event(
+                        audit_event, processing_time_ms=elapsed_ms, presidio_entities=ai_presidio_entities
+                    )
+                    
                     return
                 
                 # If analysis passes, emit the pieces
@@ -1253,6 +1344,9 @@ async def chat_stream_sse(request: Request, chat_req: ChatRequest):
                     
                     if response_tokens > 0 and response_tokens % window_threshold == 0:
                         response_window_count += 1
+                        # Record response window analysis for metrics
+                        metrics.record_response_window()
+                        
                         # Analyze recent AI output for compliance display
                         window_start = max(0, response_tokens - window_threshold)
                         recent_response = response_text[-500:] if len(response_text) > 500 else response_text
@@ -1577,6 +1671,9 @@ async def get_metrics():
         "blocked_requests": metrics.blocked_requests,
         "block_rate": metrics.block_rate,
         "avg_risk_score": metrics.avg_risk_score,
+        "max_risk_score": metrics.max_risk_score,
+        "input_windows_analyzed": metrics.input_windows_analyzed,
+        "response_windows_analyzed": metrics.response_windows_analyzed,
         "pattern_detections": dict(metrics.pattern_detections),
         "presidio_detections": dict(metrics.presidio_detections),
         "performance_metrics": {

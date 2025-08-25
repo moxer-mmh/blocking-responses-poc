@@ -240,11 +240,11 @@ const Dashboard: React.FC = () => {
         />
 
         <MetricCard
-          title="Avg Risk Score"
-          value={realtimeMetrics.avg_risk_score.toFixed(2)}
+          title="Max Risk Score"
+          value={realtimeMetrics.max_risk_score.toFixed(2)}
           icon={TrendingUp}
           variant="elevated"
-          color={realtimeMetrics.avg_risk_score >= 0.8 ? 'red' : realtimeMetrics.avg_risk_score >= 0.5 ? 'yellow' : 'green'}
+          color={realtimeMetrics.max_risk_score >= 0.8 ? 'red' : realtimeMetrics.max_risk_score >= 0.5 ? 'yellow' : 'green'}
           size="responsive"
           animated={true}
         />
@@ -255,6 +255,44 @@ const Dashboard: React.FC = () => {
           description="Average response"
           icon={Clock}
           variant="elevated"
+          size="responsive"
+          animated={true}
+        />
+      </motion.div>
+
+      {/* Analysis Windows Stats */}
+      <motion.div
+        variants={itemVariants}
+        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 xs:gap-4 sm:gap-5 lg:gap-6"
+      >
+        <CounterMetric
+          title="Input Windows"
+          count={realtimeMetrics.input_windows_analyzed}
+          description="User input analyzed"
+          icon={Activity}
+          variant="minimal"
+          color="blue"
+          size="responsive"
+          animated={true}
+        />
+
+        <CounterMetric
+          title="Response Windows"
+          count={realtimeMetrics.response_windows_analyzed}
+          description="AI response analyzed"
+          icon={Activity}
+          variant="minimal"
+          color="green"
+          size="responsive"
+          animated={true}
+        />
+
+        <MetricCard
+          title="Avg Risk Score"
+          value={realtimeMetrics.avg_risk_score.toFixed(2)}
+          icon={TrendingUp}
+          variant="minimal"
+          color={realtimeMetrics.avg_risk_score >= 0.8 ? 'red' : realtimeMetrics.avg_risk_score >= 0.5 ? 'yellow' : 'green'}
           size="responsive"
           animated={true}
         />

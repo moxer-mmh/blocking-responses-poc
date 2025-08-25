@@ -25,6 +25,8 @@ import { Button } from '@/components/ui/Button'
 import { Badge, RiskBadge } from '@/components/ui/Badge'
 import { useConnection } from '@/utils/useConnection'
 import { useNotifications } from '@/components/ui/Notifications'
+import { useDashboardStore } from '@/stores/dashboard'
+import { apiClient } from '@/utils/api'
 
 interface Message {
   id: string
@@ -86,6 +88,9 @@ interface AnalysisConfig {
 }
 
 const StreamMonitor: React.FC = () => {
+  // Global metrics from dashboard store
+  const { realtimeMetrics, updateMetrics } = useDashboardStore()
+  
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
   const [currentMessage, setCurrentMessage] = useState('Please write me an essay in 500 words about diabetes. What should I do if I am at risk for diabetes.')
@@ -163,6 +168,28 @@ const StreamMonitor: React.FC = () => {
     }
     fetchConfig()
   }, [])
+
+  // Fetch global metrics periodically for Live Statistics
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await apiClient.getMetrics()
+        if (response.success && response.data) {
+          updateMetrics(response.data)
+        }
+      } catch (err) {
+        console.error('Failed to fetch metrics:', err)
+      }
+    }
+
+    // Initial fetch
+    fetchMetrics()
+
+    // Set up periodic fetching every 3 seconds for live stats
+    const interval = setInterval(fetchMetrics, 3000)
+
+    return () => clearInterval(interval)
+  }, [updateMetrics])
 
   useEffect(() => {
     return () => {
@@ -290,48 +317,50 @@ const StreamMonitor: React.FC = () => {
               }
               
               // Handle input window analysis events
-              if (data.type === 'window_analysis') {
+              if (data.type === 'input_window') {
                 const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
                 const analysisData = JSON.parse(data.content)
                 
-                if (analysisData.analysis_type === 'input') {
-                  const windowAnalysis: WindowAnalysis = {
-                    ...analysisData,
-                    timestamp
-                  }
-                  setInputWindowAnalyses(prev => [...prev, windowAnalysis])
-                  setRiskScores(prev => [...prev, analysisData.total_score])
-                  setCurrentRiskScore(analysisData.total_score)
-                  
-                  setEvents(prev => [...prev, {
-                    id: prev.length + 1,
-                    type: 'input_window_analysis',
-                    timestamp,
-                    description: `Analyzed input window ${prev.filter(e => e.type === 'input_window_analysis').length + 1} (tokens ${analysisData.window_start}-${analysisData.window_end}): Risk ${analysisData.total_score.toFixed(3)}`,
-                    risk: analysisData.total_score,
-                    entities: analysisData.presidio_entities?.map((e: any) => e.entity_type),
-                    patterns: analysisData.triggered_rules
-                  }])
-                }
-              }
-              
-              // Handle response window display events
-              if (data.type === 'response_window') {
-                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
-                const windowData = JSON.parse(data.content)
-                
-                const responseWindow: WindowAnalysis = {
-                  ...windowData,
+                const windowAnalysis: WindowAnalysis = {
+                  ...analysisData,
                   timestamp
                 }
-                setResponseWindows(prev => [...prev, responseWindow])
+                setInputWindowAnalyses(prev => [...prev, windowAnalysis])
+                setRiskScores(prev => [...prev, analysisData.total_score])
+                setCurrentRiskScore(analysisData.total_score)
                 
                 setEvents(prev => [...prev, {
                   id: prev.length + 1,
-                  type: 'response_window',
+                  type: 'input_window_analysis',
                   timestamp,
-                  description: `Response window ${windowData.window_number}: ${windowData.window_size} tokens analyzed`,
-                  risk: 0.0
+                  description: `Analyzed input window ${prev.filter(e => e.type === 'input_window_analysis').length + 1} (tokens ${analysisData.window_start}-${analysisData.window_end}): Risk ${analysisData.total_score.toFixed(3)}`,
+                  risk: analysisData.total_score,
+                  entities: analysisData.presidio_entities?.map((e: any) => e.entity_type),
+                  patterns: analysisData.triggered_rules
+                }])
+              }
+              
+              // Handle response window analysis events  
+              if (data.type === 'response_window') {
+                const timestamp = new Date().toLocaleTimeString() + '.' + Date.now().toString().slice(-3)
+                const analysisData = JSON.parse(data.content)
+                
+                const windowAnalysis: WindowAnalysis = {
+                  ...analysisData,
+                  timestamp
+                }
+                setResponseWindows(prev => [...prev, windowAnalysis])
+                setRiskScores(prev => [...prev, analysisData.total_score])
+                setCurrentRiskScore(Math.max(currentRiskScore, analysisData.total_score))
+                
+                setEvents(prev => [...prev, {
+                  id: prev.length + 1,
+                  type: 'response_window_analysis',
+                  timestamp,
+                  description: `Analyzed response window ${analysisData.window_number} (tokens ${analysisData.window_start}-${analysisData.window_end}): Risk ${analysisData.total_score.toFixed(3)}`,
+                  risk: analysisData.total_score,
+                  entities: analysisData.presidio_entities?.map((e: any) => e.entity_type),
+                  patterns: analysisData.triggered_rules
                 }])
               }
               
@@ -1257,11 +1286,12 @@ const StreamMonitor: React.FC = () => {
             </div>
           </div>
           
-          {/* Live Statistics */}
+          {/* Live Statistics - Current Session Only */}
           <div>
             <h4 className="font-semibold text-xs xs:text-sm text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
               <BarChart3 className="w-3 h-3 xs:w-4 xs:h-4 text-purple-600" />
               <span>Live Statistics</span>
+              <Badge variant="outline" className="text-xs">Current Session</Badge>
             </h4>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2 text-center border border-blue-200 dark:border-blue-800">
@@ -1286,10 +1316,10 @@ const StreamMonitor: React.FC = () => {
               </div>
             </div>
             
-            {/* Performance Metrics */}
+            {/* Session Performance Metrics */}
             {inputWindowAnalyses.length > 0 && (
               <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-800 rounded border">
-                <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">Analysis Performance</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">Session Analysis</div>
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between">
                     <span>Windows Analyzed:</span>
@@ -1298,7 +1328,7 @@ const StreamMonitor: React.FC = () => {
                   <div className="flex justify-between">
                     <span>Avg Risk Score:</span>
                     <span className="font-mono text-orange-600">
-                      {(riskScores.reduce((a, b) => a + b, 0) / riskScores.length).toFixed(3)}
+                      {riskScores.length > 0 ? (riskScores.reduce((a, b) => a + b, 0) / riskScores.length).toFixed(3) : '0.000'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -1308,6 +1338,25 @@ const StreamMonitor: React.FC = () => {
                 </div>
               </div>
             )}
+            
+            {/* Global Statistics (Collapsed by default) */}
+            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-900 rounded border">
+              <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">Global App Metrics</div>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span>Total Requests:</span>
+                  <span className="font-mono text-blue-600">{realtimeMetrics.total_requests}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Global Max Risk:</span>
+                  <span className="font-mono text-orange-600">{realtimeMetrics.max_risk_score.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Block Rate:</span>
+                  <span className="font-mono text-red-600">{realtimeMetrics.block_rate.toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

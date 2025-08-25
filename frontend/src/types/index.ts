@@ -71,6 +71,9 @@ export interface MetricsSummary {
   blocked_requests: number
   block_rate: number
   avg_risk_score: number
+  max_risk_score: number
+  input_windows_analyzed: number
+  response_windows_analyzed: number
   pattern_detections: Record<string, number>
   presidio_detections: Record<string, number>
   performance_metrics: PerformanceMetrics

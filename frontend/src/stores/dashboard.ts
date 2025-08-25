@@ -47,6 +47,9 @@ const initialState: DashboardState = {
     blocked_requests: 0,
     block_rate: 0,
     avg_risk_score: 0,
+    max_risk_score: 0,
+    input_windows_analyzed: 0,
+    response_windows_analyzed: 0,
     pattern_detections: {},
     presidio_detections: {},
     performance_metrics: {
