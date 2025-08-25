@@ -42,6 +42,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API router
+from app.api.v1.api import api_router
+app.include_router(api_router, prefix="/api/v1")
+
+# Add legacy endpoints for backward compatibility
+from app.api.v1.endpoints import compliance, metrics, config
+
+# Root level endpoints (backward compatibility)
+app.include_router(compliance.router, prefix="/compliance", tags=["compliance-legacy"])
+app.include_router(metrics.router, prefix="/metrics", tags=["metrics-legacy"])  
+app.include_router(config.router, prefix="/config", tags=["config-legacy"])
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -93,6 +105,14 @@ async def health_check():
         },
         "note": "This is the restructured backend - original endpoints will be migrated gradually"
     }
+
+
+# Legacy assess-risk endpoint at root level
+@app.post("/assess-risk")
+async def legacy_assess_risk(text: str, region: str = None):
+    """Legacy assess-risk endpoint for backward compatibility."""
+    from app.api.v1.endpoints.compliance import assess_compliance_risk
+    return await assess_compliance_risk(text, region)
 
 
 @app.get("/")
